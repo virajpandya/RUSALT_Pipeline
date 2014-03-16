@@ -67,8 +67,18 @@ def combineflats(allflats=dicts.flats,indiv=False):
 		flatlist = allflats[angle]
 		print "the flatlist for "+angle+" is: "
 		print flatlist
-		# If flatlist doesn't have multiple flats in it, can't "combine", so skip to next flatlist
-		if len(flatlist)==0 or len(flatlist)==1:
+		# set output names
+		name = 'flt'+str(angle)+'cmb.fits'
+		auxname = 'flt'+str(angle)+'cmbAUX.fits'
+		# If flatlist doesn't have multiple flats in it, can't "combine", just imcopy and use new one as combined flat
+		if len(flatlist)==0:
+			print "WARNING: no flat for angle"+angle
+			continue
+		elif len(flatlist)==1:
+			print "WARNING: only one flat for angle"+angle
+			pyrafCalls.run_imcopy(inputname=flatlist[0],outputname=name) # will make copy, preserve 2-extension file structure
+			pipeHistory.updatePipeKeys(inputname=name,imagetype='flat',procChar='c')
+			dicts.combflats[angle] = name
 			continue
 		# Loop through the headers of each flat in the list to find the average EXPTIME and AIRMASS
 		avgEXPTIME = 0
@@ -83,9 +93,6 @@ def combineflats(allflats=dicts.flats,indiv=False):
 			hdulist.close()
 		avgEXPTIME = avgEXPTIME/len(flatlist)
 		avgAIRMASS = avgAIRMASS/len(flatlist)
-		# set output names
-		name = 'flt'+str(angle)+'cmb.fits'
-		auxname = 'flt'+str(angle)+'cmbAUX.fits'
 		# this calls the run_flatcombine(flatstocombine,combflatname) function
 		pyrafCalls.run_flatcombine(flatstocombine=flatlist,combflatname=auxname,customRun=indiv)
 		# This copies one original file to the final file (to preserve file structure), and replaces data and header keys
@@ -941,8 +948,8 @@ def extractstandards(standardimages=dicts.wavestandards,indiv=False):
 		hdr0_old = hdulist[0].header.copy()
 		hdr1_old = hdulist[1].header.copy()
 		hdulist.close()
-		# setting answer = 0 (bright, not faint, spectrum) since standards will be extracted non-interactively
-		answer = '0'
+		# setting answer =2 (bright spectrum with local bkg subtraction) since standards will be extracted non-interactively
+		answer = '2'
 		# output filenames
 		name = 'std'+str(angle)+'ext'+suffix+'.fits'
 		auxname = 'std'+str(angle)+'ext'+suffix+'AUX'+'.fits'
@@ -2628,6 +2635,7 @@ def copySciSkySig(fluxspectra=dicts.fluxsciences,indiv=False):
 	
 # This function scales dispersion-corrected science spectra so that they have similar count/sec values at overlapping wavelengths.
 # This is for creating the combined count-based spectrum.
+# 2014-03-16: changed to scaling counts, not counts/EXPTIME, because that doesn't work if each spectrum has a different exptime.
 def scaleDispScienceSpectra(sciencespectra=dicts.dispsciences,indiv=False):
 	# This prints an error and quits the function if any of the inputted dictionaries don't exist
 	try:
@@ -2675,7 +2683,7 @@ def scaleDispScienceSpectra(sciencespectra=dicts.dispsciences,indiv=False):
 		cd1 = hdr1['CD1_1']
 		crval1 = hdr1['CRVAL1']
 		exptime1 = hdr1['EXPTIME']
-		dat1 = dat1 / exptime1 # must scale counts/sec, not counts alone (unlike with flux)
+		#dat1 = dat1 / exptime1 # must scale counts/sec, not counts alone (unlike with flux)
 		# figure out chip gap pixels based on CCDSUM binning header keyword
 		ccdsum = (hdu1[0].header)['CCDSUM']
 		if ccdsum == '2 4': # 2x4 binning
@@ -2725,7 +2733,7 @@ def scaleDispScienceSpectra(sciencespectra=dicts.dispsciences,indiv=False):
 		print p1
 		# apply the scaling function to entire original spectrum 0 data 
 		dat0scaled = (p1[0]+p1[1]*wave0)*dat0
-		dat0scaled = dat0scaled * exptime0 # reverse mapping from counts/sec to counts
+		#dat0scaled = dat0scaled * exptime0 # reverse mapping from counts/sec to counts
 		# copy old file over and replace old data with new scaled data
 		suffixlist = sci0.split('.')
 		suffix = suffixlist[1][5:]
@@ -2773,7 +2781,7 @@ def scaleDispScienceSpectra(sciencespectra=dicts.dispsciences,indiv=False):
 		cdr = hdrr['CD1_1']
 		crvalr = hdrr['CRVAL1']
 		exptimer = hdrr['EXPTIME']
-		datr = datr / exptimer # must scale counts/sec, not counts alone (unlike with flux)
+		#datr = datr / exptimer # must scale counts/sec, not counts alone (unlike with flux)
 		hduref.close()
 		# next, use a for loop to create a scaled spectrum for each non-refsci spectrum
 		for angle in angles:
@@ -2791,7 +2799,7 @@ def scaleDispScienceSpectra(sciencespectra=dicts.dispsciences,indiv=False):
 			cdc = hdrc['CD1_1']
 			crvalc = hdrc['CRVAL1']
 			exptimec = hdrc['EXPTIME']
-			datc = datc / exptimec # must scale counts/sec, not counts alone (unlike with flux)
+			#datc = datc / exptimec # must scale counts/sec, not counts alone (unlike with flux)
 			# figure out chip gap pixels based on CCDSUM binning header keyword
 			ccdsum = (hducur[0].header)['CCDSUM']
 			if ccdsum == '2 4': # 2x4 binning
@@ -2846,7 +2854,7 @@ def scaleDispScienceSpectra(sciencespectra=dicts.dispsciences,indiv=False):
 			print p1
 			# apply the scaling function to entire original current spectrum data 
 			datcscaled = (p1[0] + p1[1]*wavec)*datc
-			datcscaled = datcscaled * exptimec # reverse mapping from counts/sec to counts
+			#datcscaled = datcscaled * exptimec # reverse mapping from counts/sec to counts
 			# copy old file over and replace old data with new scaled data
 			suffixlist = cursci.split('.')
 			suffix = suffixlist[1][5:]
