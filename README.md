@@ -17,3 +17,5 @@ initial upload: 2014-03-16
 - tasks.py: CORE of the pipeline, one function per reduction step, calls functions from pyrafCalls.py to actually run PyRAF tasks. The order of the functions mimics the order/steps of an actual full reduction as seen in fullReduce.py.
 
 Run the pipeline in your directory with mbxgp images with "python driver.py". Make sure you've verified that the appropriate mbxgp files are in your directory, and that their basic header keywords are reliable (e.g., 1 arc per GR-ANGLE, etc.) SALT sometimes excludes files, or includes extras (like bad flats, or multiple arcs per angle).
+
+# test git on ubuntu, viraj pandya
