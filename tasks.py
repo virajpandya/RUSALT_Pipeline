@@ -1716,7 +1716,7 @@ def fluxcal(dspsci=dicts.dispsciences,dspstd=dicts.dispstandards,indiv=False):
 			# this adds GR-ANGLE to sensfile header for dictionaries()
 			hdusens = pyfits.open(sensfile+'.fits',mode='update') 
 			hdrsens = hdusens[0].header
-			hdrbwm.update('GR-ANGLE',float(angle))
+			hdrsens.update('GR-ANGLE',float(angle))
 			hdrsens['RUPIPE'] = 'g'
 			hdrsens['RUIMGTYPE'] = 'sensfunc'
 			hdusens.flush()
@@ -2113,7 +2113,8 @@ def scaleFluxScienceSpectra(sciencespectra=dicts.fluxsciences,indiv=False):
 			suffixlist = cursci.split('.')
 			suffix = suffixlist[1][5:]
 			namesci = 'sci'+angle+'scl'+suffix+'.fits'
-			pyrafCalls.run_imcopy(inputname=cursci,outputname=namesci)
+			if os.path.exists(namesci) == False:
+				pyrafCalls.run_imcopy(inputname=cursci,outputname=namesci)
 			hdunew = pyfits.open(namesci,mode='update')
 			datsci = hdunew[1].data
 			# we will replace the 1st spectral band (optimally-extracted spectrum) with the scaled one
@@ -2144,114 +2145,114 @@ def scaleFluxScienceSpectra(sciencespectra=dicts.fluxsciences,indiv=False):
 			# check if r2ang1 spectrum is far enough from refAngle spectrum such that there was insufficient wavelength overlap in round 1
 			# a difference in gr-angle of 2 degrees is arbitrary
 			# I wonder if it can be made more dynamic or derived through a simple statistical value (median, mean, etc.)
-			if abs(r2ang1-refAngleFloat) > 2.0:
-				for r2ang2 in floatAngles: # nested for loop to get the other non-refAngle spectrum to scale (or become reference)
-					if r2ang2 == refAngleFloat:
-						continue # again, don't want to rescale refAngle spectrum. it is the basis for our automatic scaling procedure
-					# r2ang2 can be in list rescaledAngles since we may need some of them for reference
-					if abs(r2ang2 - r2ang1) < 2.0: # need r2ang1 and r2ang2 spectra to have significant wavelength overlap for meaningful rescaling
-						# we want to use the spectrum whose angle is closer to refAngle (preferably median) as the new reference spectrum
-						# i.e., we will scale the spectrum with the more distant angle (relative to refAngle) based on the other angle
-						distAng1 = abs(r2ang1 - refAngleFloat)
-						distAng2 = abs(r2ang2 - refAngleFloat)
-						if distAng1 <= distAng2: # if distance between r2ang1 and refAngle is shorter, use r2ang1 as the new refAngle
-							newRefAngle = r2ang1
-							rescaleAngle = r2ang2
-						else:
-							newRefAngle = r2ang2
-							rescaleAngle = r2ang1
-						# begin the rescaling process in the same fashion as the scaling process from round 1
-						print 'Beginning RESCALING process for spectrum with GR-ANGLE: '+str(rescaleAngle)
-						refsci = dicts.scaledfluxsciences[floatAngMaps[newRefAngle]] # using scaled spectra now for the rescaling process
-						cursci = dicts.scaledfluxsciences[floatAngMaps[rescaleAngle]]
-						# get data and relevant header information
-						hduref = pyfits.open(refsci)
-						datr = hduref[1].data.copy() # reference spectrum data
-						datr = datr[0][0]
-						hdrr = hduref[1].header # reference spectrum header
-						crpixr= hdrr['CRPIX1'] # reference spectrum WCS information
-						cdr = hdrr['CD1_1']
-						crvalr = hdrr['CRVAL1']
-						hduref.close()
-						waver = np.linspace(crvalr,crvalr+cdr*(len(datr)-crpixr),len(datr)) # reference spectrum wavelength array
-						# retrieve and construct the necessary information about the current spectrum to be scaled
-						print "The current spectrum being rescaled is: "+cursci
-						hducur = pyfits.open(cursci)
-						datc = hducur[1].data.copy() # current science spectrum data
-						datc = datc[0][0]
-						hdrc = hducur[1].header # current science spectrum header
-						crpixc = hdrc['CRPIX1'] # current science spectrum WCS information
-						cdc = hdrc['CD1_1']
-						crvalc = hdrc['CRVAL1']
-						# figure out chip gap pixels based on CCDSUM binning header keyword
-						ccdsum = (hducur[0].header)['CCDSUM']
-						if ccdsum == '2 4': # 2x4 binning
-							c1min,c1max = params.chipGapPix24[0]
-							c2min,c2max = params.chipGapPix24[1]
-						elif ccdsum == '4 4': # 4x4 binning
-							c1min,c1max = params.chipGapPix44[0]
-							c2min,c2max = params.chipGapPix44[1]
-						hducur.close()
-						wavec = np.linspace(crvalc,crvalc+cdc*(len(datc)-crpixc),len(datc)) # current science spectrum wavelength array
-						# even though these are scaled spectra, the chip gaps are not gone so follow similar procedure as in round 1
-						# get rid of the chip gaps (based on their ~invariant pixel numbers) for reference spectrum
-						pixr = np.arange(len(datr))+1 # 1-based pixel array for reference spectrum
-						datrgood = datr[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's flux values
-						wavergood = waver[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's wavelengths
-						pixrgood = pixr[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's pixels
-						datrgood = datrgood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's flux values
-						wavergood = wavergood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's wavelengths
-						pixrgood = pixrgood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's pixels
-						# get rid of the chip gaps (based on their ~invariant pixel numbers) for current spectrum
-						pixc = np.arange(len(datc))+1 # 1-based pixel array for current spectrum
-						datcgood = datc[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's flux values
-						wavecgood = wavec[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's wavelengths
-						pixcgood = pixc[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's pixels
-						datcgood = datcgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's flux values
-						wavecgood = wavecgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's wavelengths
-						pixcgood = pixcgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's pixels
-						# construct a common wavelength array
-						minwavergood = min(wavergood) # minimum wavelength of chip-corrected reference spectrum
-						maxwavergood = max(wavergood) # maximum wavelength of chip-corrected ref spectrum
-						minwavecgood = min(wavecgood) # minimum wavelength of chip-corrected current spectrum
-						maxwavecgood = max(wavecgood) # maximum wavelength of chip-corrected cur spectrum
-						# construct common wavelength array based on whether rescaleAngle or newRefAngle is lower
-						# and then find flux values of reference spectrum at these common wavelengths
-						if rescaleAngle <= newRefAngle: # the two angles should not really ever be equal (for this step)
-							wavecom = wavergood[np.logical_and(wavergood>=minwavergood,wavergood<=maxwavecgood)]
-							datrcom = datrgood[np.logical_and(wavergood>=minwavergood,wavergood<=maxwavecgood)]
-						elif rescaleAngle > newRefAngle:
-							wavecom = wavergood[np.logical_and(wavergood>=minwavecgood,wavergood<=maxwavergood)]
-							datrcom = datrgood[np.logical_and(wavergood>=minwavecgood,wavergood<=maxwavergood)]
-						# find interpolant of entire chip-gap-corrected wavelength values of current spectrum
-						fc = interp1d(wavecgood,datcgood)
-						# use interpolant to get flux values of current spectrum at common wavelengths only
-						datccom = fc(wavecom)
-						# use least-squares method to minimize distance between ref and cur spectra at common wavelengths
-						print 'Beginning optimization process for RESCALING.'
-						print 'A second order scaling function will now be fit to reduce the error between the two spectra at common wavelengths: '
-						print 'p[0] + p[1]*x + p[2]*x*x where x is the common wavelength NumPy array.'
-						fitfunc = lambda p,x: (p[0] + p[1]*x + p[2]*x*x)*datccom # this order-2 function will scale cur spectrum
-						errfunc = lambda p,x,y: fitfunc(p,x) - y
-						p0 = [1.0, 0.0, 0.0] # initial guess for parameters of second-order fitfunc is that it is a constant function
-						p1,success = leastsq(errfunc,p0,args=(wavecom,datrcom))
-						print 'The parameters of the second-order scaling function are ([p0,p1,p2]): '
-						print p1
-						# apply the scaling function to entire original (already scaled) current spectrum data 
-						datcscaled = (p1[0]+p1[1]*wavec+p1[2]*wavec*wavec)*datc
-						# replace old already-scaled data with new RESCALED data
-						hdunew = pyfits.open(cursci,mode='update')
-						datsci = hdunew[1].data.copy()
-						# we will replace the 1st spectral band (optimally-extracted spectrum) with the scaled one
-						# band 2 will remain as the non-optimal, uncleaned, unweighted, non-scaled spectrum
-						# band 3 will remain the non-scaled sky spectrum
-						# band 4 will remain the non-scaled sigma spectrum
-						datsci[0] = datcscaled
-						hdunew[1].data = datsci
-						hdunew.flush()
-						# add rescaled spectrum's angle to list rescaledAngles
-						rescaledAngles.append(rescaleAngle)
-						print 'Rescaling complete for spectrum with GR-ANGLE: '+str(rescaleAngle)
+			#if abs(r2ang1-refAngleFloat) > 2.0:
+			for r2ang2 in floatAngles: # nested for loop to get the other non-refAngle spectrum to scale (or become reference)
+				if r2ang2 == refAngleFloat:
+					continue # again, don't want to rescale refAngle spectrum. it is the basis for our automatic scaling procedure
+				# r2ang2 can be in list rescaledAngles since we may need some of them for reference
+				if abs(r2ang2 - r2ang1) < 2.0: # need r2ang1 and r2ang2 spectra to have significant wavelength overlap for meaningful rescaling
+					# we want to use the spectrum whose angle is closer to refAngle (preferably median) as the new reference spectrum
+					# i.e., we will scale the spectrum with the more distant angle (relative to refAngle) based on the other angle
+					distAng1 = abs(r2ang1 - refAngleFloat)
+					distAng2 = abs(r2ang2 - refAngleFloat)
+					if distAng1 <= distAng2: # if distance between r2ang1 and refAngle is shorter, use r2ang1 as the new refAngle
+						newRefAngle = r2ang1
+						rescaleAngle = r2ang2
+					else:
+						newRefAngle = r2ang2
+						rescaleAngle = r2ang1
+					# begin the rescaling process in the same fashion as the scaling process from round 1
+					print 'Beginning RESCALING process for spectrum with GR-ANGLE: '+str(rescaleAngle)
+					refsci = dicts.scaledfluxsciences[floatAngMaps[newRefAngle]] # using scaled spectra now for the rescaling process
+					cursci = dicts.scaledfluxsciences[floatAngMaps[rescaleAngle]]
+					# get data and relevant header information
+					hduref = pyfits.open(refsci)
+					datr = hduref[1].data.copy() # reference spectrum data
+					datr = datr[0][0]
+					hdrr = hduref[1].header # reference spectrum header
+					crpixr= hdrr['CRPIX1'] # reference spectrum WCS information
+					cdr = hdrr['CD1_1']
+					crvalr = hdrr['CRVAL1']
+					hduref.close()
+					waver = np.linspace(crvalr,crvalr+cdr*(len(datr)-crpixr),len(datr)) # reference spectrum wavelength array
+					# retrieve and construct the necessary information about the current spectrum to be scaled
+					print "The current spectrum being rescaled is: "+cursci
+					hducur = pyfits.open(cursci)
+					datc = hducur[1].data.copy() # current science spectrum data
+					datc = datc[0][0]
+					hdrc = hducur[1].header # current science spectrum header
+					crpixc = hdrc['CRPIX1'] # current science spectrum WCS information
+					cdc = hdrc['CD1_1']
+					crvalc = hdrc['CRVAL1']
+					# figure out chip gap pixels based on CCDSUM binning header keyword
+					ccdsum = (hducur[0].header)['CCDSUM']
+					if ccdsum == '2 4': # 2x4 binning
+						c1min,c1max = params.chipGapPix24[0]
+						c2min,c2max = params.chipGapPix24[1]
+					elif ccdsum == '4 4': # 4x4 binning
+						c1min,c1max = params.chipGapPix44[0]
+						c2min,c2max = params.chipGapPix44[1]
+					hducur.close()
+					wavec = np.linspace(crvalc,crvalc+cdc*(len(datc)-crpixc),len(datc)) # current science spectrum wavelength array
+					# even though these are scaled spectra, the chip gaps are not gone so follow similar procedure as in round 1
+					# get rid of the chip gaps (based on their ~invariant pixel numbers) for reference spectrum
+					pixr = np.arange(len(datr))+1 # 1-based pixel array for reference spectrum
+					datrgood = datr[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's flux values
+					wavergood = waver[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's wavelengths
+					pixrgood = pixr[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's pixels
+					datrgood = datrgood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's flux values
+					wavergood = wavergood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's wavelengths
+					pixrgood = pixrgood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's pixels
+					# get rid of the chip gaps (based on their ~invariant pixel numbers) for current spectrum
+					pixc = np.arange(len(datc))+1 # 1-based pixel array for current spectrum
+					datcgood = datc[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's flux values
+					wavecgood = wavec[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's wavelengths
+					pixcgood = pixc[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's pixels
+					datcgood = datcgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's flux values
+					wavecgood = wavecgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's wavelengths
+					pixcgood = pixcgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's pixels
+					# construct a common wavelength array
+					minwavergood = min(wavergood) # minimum wavelength of chip-corrected reference spectrum
+					maxwavergood = max(wavergood) # maximum wavelength of chip-corrected ref spectrum
+					minwavecgood = min(wavecgood) # minimum wavelength of chip-corrected current spectrum
+					maxwavecgood = max(wavecgood) # maximum wavelength of chip-corrected cur spectrum
+					# construct common wavelength array based on whether rescaleAngle or newRefAngle is lower
+					# and then find flux values of reference spectrum at these common wavelengths
+					if rescaleAngle <= newRefAngle: # the two angles should not really ever be equal (for this step)
+						wavecom = wavergood[np.logical_and(wavergood>=minwavergood,wavergood<=maxwavecgood)]
+						datrcom = datrgood[np.logical_and(wavergood>=minwavergood,wavergood<=maxwavecgood)]
+					elif rescaleAngle > newRefAngle:
+						wavecom = wavergood[np.logical_and(wavergood>=minwavecgood,wavergood<=maxwavergood)]
+						datrcom = datrgood[np.logical_and(wavergood>=minwavecgood,wavergood<=maxwavergood)]
+					# find interpolant of entire chip-gap-corrected wavelength values of current spectrum
+					fc = interp1d(wavecgood,datcgood)
+					# use interpolant to get flux values of current spectrum at common wavelengths only
+					datccom = fc(wavecom)
+					# use least-squares method to minimize distance between ref and cur spectra at common wavelengths
+					print 'Beginning optimization process for RESCALING.'
+					print 'A second order scaling function will now be fit to reduce the error between the two spectra at common wavelengths: '
+					print 'p[0] + p[1]*x + p[2]*x*x where x is the common wavelength NumPy array.'
+					fitfunc = lambda p,x: (p[0] + p[1]*x + p[2]*x*x)*datccom # this order-2 function will scale cur spectrum
+					errfunc = lambda p,x,y: fitfunc(p,x) - y
+					p0 = [1.0, 0.0, 0.0] # initial guess for parameters of second-order fitfunc is that it is a constant function
+					p1,success = leastsq(errfunc,p0,args=(wavecom,datrcom))
+					print 'The parameters of the second-order scaling function are ([p0,p1,p2]): '
+					print p1
+					# apply the scaling function to entire original (already scaled) current spectrum data 
+					datcscaled = (p1[0]+p1[1]*wavec+p1[2]*wavec*wavec)*datc
+					# replace old already-scaled data with new RESCALED data
+					hdunew = pyfits.open(cursci,mode='update')
+					datsci = hdunew[1].data.copy()
+					# we will replace the 1st spectral band (optimally-extracted spectrum) with the scaled one
+					# band 2 will remain as the non-optimal, uncleaned, unweighted, non-scaled spectrum
+					# band 3 will remain the non-scaled sky spectrum
+					# band 4 will remain the non-scaled sigma spectrum
+					datsci[0] = datcscaled
+					hdunew[1].data = datsci
+					hdunew.flush()
+					# add rescaled spectrum's angle to list rescaledAngles
+					rescaledAngles.append(rescaleAngle)
+					print 'Rescaling complete for spectrum with GR-ANGLE: '+str(rescaleAngle)
 		print "The angles of the rescaled spectra are: "
 		print rescaledAngles
 	print 'The scaled flux-calibrated science spectra filenames are: '
@@ -2504,114 +2505,114 @@ def scaleStdStarSpectra(stdspectra=dicts.fluxstandards,indiv=False):
 			# check if r2ang1 spectrum is far enough from refAngle spectrum such that there was insufficient wavelength overlap in round 1
 			# a difference in gr-angle of 2 degrees is arbitrary
 			# I wonder if it can be made more dynamic or derived through a simple statistical value (median, mean, etc.)
-			if abs(r2ang1-refAngleFloat) > 2.0:
-				for r2ang2 in floatAngles: # nested for loop to get the other non-refAngle spectrum to scale (or become reference)
-					if r2ang2 == refAngleFloat:
-						continue # again, don't want to rescale refAngle spectrum. it is the basis for our automatic scaling procedure
-					# r2ang2 can be in list rescaledAngles since we may need some of them for reference
-					if abs(r2ang2 - r2ang1) < 2.0: # need r2ang1 and r2ang2 spectra to have significant wavelength overlap for meaningful rescaling
-						# we want to use the spectrum whose angle is closer to refAngle (preferably median) as the new reference spectrum
-						# i.e., we will scale the spectrum with the more distant angle (relative to refAngle) based on the other angle
-						distAng1 = abs(r2ang1 - refAngleFloat)
-						distAng2 = abs(r2ang2 - refAngleFloat)
-						if distAng1 <= distAng2: # if distance between r2ang1 and refAngle is shorter, use r2ang1 as the new refAngle
-							newRefAngle = r2ang1
-							rescaleAngle = r2ang2
-						else:
-							newRefAngle = r2ang2
-							rescaleAngle = r2ang1
-						# begin the rescaling process in the same fashion as the scaling process from round 1
-						print 'Beginning RESCALING process for spectrum with GR-ANGLE: '+str(rescaleAngle)
-						refstd = dicts.scaledstandards[floatAngMaps[newRefAngle]] # using scaled spectra now for the rescaling process
-						curstd = dicts.scaledstandards[floatAngMaps[rescaleAngle]]
-						# get data and relevant header information
-						hduref = pyfits.open(refstd)
-						datr = hduref[1].data.copy() # reference spectrum data
-						datr = datr[0][0]
-						hdrr = hduref[1].header # reference spectrum header
-						crpixr= hdrr['CRPIX1'] # reference spectrum WCS information
-						cdr = hdrr['CD1_1']
-						crvalr = hdrr['CRVAL1']
-						hduref.close()
-						waver = np.linspace(crvalr,crvalr+cdr*(len(datr)-crpixr),len(datr)) # reference spectrum wavelength array
-						# retrieve and construct the necessary information about the current spectrum to be scaled
-						print "The current spectrum being rescaled is: "+curstd
-						hducur = pyfits.open(curstd)
-						datc = hducur[1].data.copy() # current std spectrum data
-						datc = datc[0][0]
-						hdrc = hducur[1].header # current std spectrum header
-						crpixc = hdrc['CRPIX1'] # current std spectrum WCS information
-						cdc = hdrc['CD1_1']
-						crvalc = hdrc['CRVAL1']
-						# figure out chip gap pixels based on CCDSUM binning header keyword
-						ccdsum = (hducur[0].header)['CCDSUM']
-						if ccdsum == '2 4': # 2x4 binning
-							c1min,c1max = params.chipGapPix24[0]
-							c2min,c2max = params.chipGapPix24[1]
-						elif ccdsum == '4 4': # 4x4 binning
-							c1min,c1max = params.chipGapPix44[0]
-							c2min,c2max = params.chipGapPix44[1]
-						hducur.close()
-						wavec = np.linspace(crvalc,crvalc+cdc*(len(datc)-crpixc),len(datc)) # current std spectrum wavelength array
-						# even though these are scaled spectra, the chip gaps are not gone so follow similar procedure as in round 1
-						# get rid of the chip gaps (based on their ~invariant pixel numbers) for reference spectrum
-						pixr = np.arange(len(datr))+1 # 1-based pixel array for reference spectrum
-						datrgood = datr[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's flux values
-						wavergood = waver[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's wavelengths
-						pixrgood = pixr[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's pixels
-						datrgood = datrgood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's flux values
-						wavergood = wavergood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's wavelengths
-						pixrgood = pixrgood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's pixels
-						# get rid of the chip gaps (based on their ~invariant pixel numbers) for current spectrum
-						pixc = np.arange(len(datc))+1 # 1-based pixel array for current spectrum
-						datcgood = datc[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's flux values
-						wavecgood = wavec[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's wavelengths
-						pixcgood = pixc[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's pixels
-						datcgood = datcgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's flux values
-						wavecgood = wavecgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's wavelengths
-						pixcgood = pixcgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's pixels
-						# construct a common wavelength array
-						minwavergood = min(wavergood) # minimum wavelength of chip-corrected reference spectrum
-						maxwavergood = max(wavergood) # maximum wavelength of chip-corrected ref spectrum
-						minwavecgood = min(wavecgood) # minimum wavelength of chip-corrected current spectrum
-						maxwavecgood = max(wavecgood) # maximum wavelength of chip-corrected cur spectrum
-						# construct common wavelength array based on whether rescaleAngle or newRefAngle is lower
-						# and then find flux values of reference spectrum at these common wavelengths
-						if rescaleAngle <= newRefAngle: # the two angles should not really ever be equal (for this step)
-							wavecom = wavergood[np.logical_and(wavergood>=minwavergood,wavergood<=maxwavecgood)]
-							datrcom = datrgood[np.logical_and(wavergood>=minwavergood,wavergood<=maxwavecgood)]
-						elif rescaleAngle > newRefAngle:
-							wavecom = wavergood[np.logical_and(wavergood>=minwavecgood,wavergood<=maxwavergood)]
-							datrcom = datrgood[np.logical_and(wavergood>=minwavecgood,wavergood<=maxwavergood)]
-						# find interpolant of entire chip-gap-corrected wavelength values of current spectrum
-						fc = interp1d(wavecgood,datcgood)
-						# use interpolant to get flux values of current spectrum at common wavelengths only
-						datccom = fc(wavecom)
-						# use least-squares method to minimize distance between ref and cur spectra at common wavelengths
-						print 'Beginning optimization process for RESCALING.'
-						print 'A second order scaling function will now be fit to reduce the error between the two spectra at common wavelengths: '
-						print 'p[0] + p[1]*x + p[2]*x*x where x is the common wavelength NumPy array.'
-						fitfunc = lambda p,x: (p[0] + p[1]*x + p[2]*x*x)*datccom # this order-2 function will scale cur spectrum
-						errfunc = lambda p,x,y: fitfunc(p,x) - y
-						p0 = [1.0, 0.0, 0.0] # initial guess for parameters of second-order fitfunc is that it is a constant function
-						p1,success = leastsq(errfunc,p0,args=(wavecom,datrcom))
-						print 'The parameters of the second-order scaling function are ([p0,p1,p2]): '
-						print p1
-						# apply the scaling function to entire original (already scaled) current spectrum data 
-						datcscaled = (p1[0]+p1[1]*wavec+p1[2]*wavec*wavec)*datc
-						# replace old already-scaled data with new RESCALED data
-						hdunew = pyfits.open(curstd,mode='update')
-						datstd = hdunew[1].data.copy()
-						# we will replace the 1st spectral band (optimally-extracted spectrum) with the scaled one
-						# band 2 will remain as the non-optimal, uncleaned, unweighted, non-scaled spectrum
-						# band 3 will remain the non-scaled sky spectrum
-						# band 4 will remain the non-scaled sigma spectrum
-						datstd[0] = datcscaled
-						hdunew[1].data = datstd
-						hdunew.flush()
-						# add rescaled spectrum's angle to list rescaledAngles
-						rescaledAngles.append(rescaleAngle)
-						print 'Rescaling complete for spectrum with GR-ANGLE: '+str(rescaleAngle)
+			#if abs(r2ang1-refAngleFloat) > 2.0:
+			for r2ang2 in floatAngles: # nested for loop to get the other non-refAngle spectrum to scale (or become reference)
+				if r2ang2 == refAngleFloat:
+					continue # again, don't want to rescale refAngle spectrum. it is the basis for our automatic scaling procedure
+				# r2ang2 can be in list rescaledAngles since we may need some of them for reference
+				if abs(r2ang2 - r2ang1) < 2.0: # need r2ang1 and r2ang2 spectra to have significant wavelength overlap for meaningful rescaling
+					# we want to use the spectrum whose angle is closer to refAngle (preferably median) as the new reference spectrum
+					# i.e., we will scale the spectrum with the more distant angle (relative to refAngle) based on the other angle
+					distAng1 = abs(r2ang1 - refAngleFloat)
+					distAng2 = abs(r2ang2 - refAngleFloat)
+					if distAng1 <= distAng2: # if distance between r2ang1 and refAngle is shorter, use r2ang1 as the new refAngle
+						newRefAngle = r2ang1
+						rescaleAngle = r2ang2
+					else:
+						newRefAngle = r2ang2
+						rescaleAngle = r2ang1
+					# begin the rescaling process in the same fashion as the scaling process from round 1
+					print 'Beginning RESCALING process for spectrum with GR-ANGLE: '+str(rescaleAngle)
+					refstd = dicts.scaledstandards[floatAngMaps[newRefAngle]] # using scaled spectra now for the rescaling process
+					curstd = dicts.scaledstandards[floatAngMaps[rescaleAngle]]
+					# get data and relevant header information
+					hduref = pyfits.open(refstd)
+					datr = hduref[1].data.copy() # reference spectrum data
+					datr = datr[0][0]
+					hdrr = hduref[1].header # reference spectrum header
+					crpixr= hdrr['CRPIX1'] # reference spectrum WCS information
+					cdr = hdrr['CD1_1']
+					crvalr = hdrr['CRVAL1']
+					hduref.close()
+					waver = np.linspace(crvalr,crvalr+cdr*(len(datr)-crpixr),len(datr)) # reference spectrum wavelength array
+					# retrieve and construct the necessary information about the current spectrum to be scaled
+					print "The current spectrum being rescaled is: "+curstd
+					hducur = pyfits.open(curstd)
+					datc = hducur[1].data.copy() # current std spectrum data
+					datc = datc[0][0]
+					hdrc = hducur[1].header # current std spectrum header
+					crpixc = hdrc['CRPIX1'] # current std spectrum WCS information
+					cdc = hdrc['CD1_1']
+					crvalc = hdrc['CRVAL1']
+					# figure out chip gap pixels based on CCDSUM binning header keyword
+					ccdsum = (hducur[0].header)['CCDSUM']
+					if ccdsum == '2 4': # 2x4 binning
+						c1min,c1max = params.chipGapPix24[0]
+						c2min,c2max = params.chipGapPix24[1]
+					elif ccdsum == '4 4': # 4x4 binning
+						c1min,c1max = params.chipGapPix44[0]
+						c2min,c2max = params.chipGapPix44[1]
+					hducur.close()
+					wavec = np.linspace(crvalc,crvalc+cdc*(len(datc)-crpixc),len(datc)) # current std spectrum wavelength array
+					# even though these are scaled spectra, the chip gaps are not gone so follow similar procedure as in round 1
+					# get rid of the chip gaps (based on their ~invariant pixel numbers) for reference spectrum
+					pixr = np.arange(len(datr))+1 # 1-based pixel array for reference spectrum
+					datrgood = datr[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's flux values
+					wavergood = waver[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's wavelengths
+					pixrgood = pixr[np.logical_or(pixr<=c1min,pixr>=c1max)] # remove first chip gap's pixels
+					datrgood = datrgood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's flux values
+					wavergood = wavergood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's wavelengths
+					pixrgood = pixrgood[np.logical_or(pixrgood<=c2min,pixrgood>=c2max)] # remove second chip gap's pixels
+					# get rid of the chip gaps (based on their ~invariant pixel numbers) for current spectrum
+					pixc = np.arange(len(datc))+1 # 1-based pixel array for current spectrum
+					datcgood = datc[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's flux values
+					wavecgood = wavec[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's wavelengths
+					pixcgood = pixc[np.logical_or(pixc<=c1min,pixc>=c1max)] # remove first chip gap's pixels
+					datcgood = datcgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's flux values
+					wavecgood = wavecgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's wavelengths
+					pixcgood = pixcgood[np.logical_or(pixcgood<=c2min,pixcgood>=c2max)] # remove second chip gap's pixels
+					# construct a common wavelength array
+					minwavergood = min(wavergood) # minimum wavelength of chip-corrected reference spectrum
+					maxwavergood = max(wavergood) # maximum wavelength of chip-corrected ref spectrum
+					minwavecgood = min(wavecgood) # minimum wavelength of chip-corrected current spectrum
+					maxwavecgood = max(wavecgood) # maximum wavelength of chip-corrected cur spectrum
+					# construct common wavelength array based on whether rescaleAngle or newRefAngle is lower
+					# and then find flux values of reference spectrum at these common wavelengths
+					if rescaleAngle <= newRefAngle: # the two angles should not really ever be equal (for this step)
+						wavecom = wavergood[np.logical_and(wavergood>=minwavergood,wavergood<=maxwavecgood)]
+						datrcom = datrgood[np.logical_and(wavergood>=minwavergood,wavergood<=maxwavecgood)]
+					elif rescaleAngle > newRefAngle:
+						wavecom = wavergood[np.logical_and(wavergood>=minwavecgood,wavergood<=maxwavergood)]
+						datrcom = datrgood[np.logical_and(wavergood>=minwavecgood,wavergood<=maxwavergood)]
+					# find interpolant of entire chip-gap-corrected wavelength values of current spectrum
+					fc = interp1d(wavecgood,datcgood)
+					# use interpolant to get flux values of current spectrum at common wavelengths only
+					datccom = fc(wavecom)
+					# use least-squares method to minimize distance between ref and cur spectra at common wavelengths
+					print 'Beginning optimization process for RESCALING.'
+					print 'A second order scaling function will now be fit to reduce the error between the two spectra at common wavelengths: '
+					print 'p[0] + p[1]*x + p[2]*x*x where x is the common wavelength NumPy array.'
+					fitfunc = lambda p,x: (p[0] + p[1]*x + p[2]*x*x)*datccom # this order-2 function will scale cur spectrum
+					errfunc = lambda p,x,y: fitfunc(p,x) - y
+					p0 = [1.0, 0.0, 0.0] # initial guess for parameters of second-order fitfunc is that it is a constant function
+					p1,success = leastsq(errfunc,p0,args=(wavecom,datrcom))
+					print 'The parameters of the second-order scaling function are ([p0,p1,p2]): '
+					print p1
+					# apply the scaling function to entire original (already scaled) current spectrum data 
+					datcscaled = (p1[0]+p1[1]*wavec+p1[2]*wavec*wavec)*datc
+					# replace old already-scaled data with new RESCALED data
+					hdunew = pyfits.open(curstd,mode='update')
+					datstd = hdunew[1].data.copy()
+					# we will replace the 1st spectral band (optimally-extracted spectrum) with the scaled one
+					# band 2 will remain as the non-optimal, uncleaned, unweighted, non-scaled spectrum
+					# band 3 will remain the non-scaled sky spectrum
+					# band 4 will remain the non-scaled sigma spectrum
+					datstd[0] = datcscaled
+					hdunew[1].data = datstd
+					hdunew.flush()
+					# add rescaled spectrum's angle to list rescaledAngles
+					rescaledAngles.append(rescaleAngle)
+					print 'Rescaling complete for spectrum with GR-ANGLE: '+str(rescaleAngle)
 		print "The angles of the rescaled spectra are: "
 		print rescaledAngles
 	print 'The scaled standard star spectra filenames are: '

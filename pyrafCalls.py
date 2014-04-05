@@ -18,6 +18,7 @@ Sept. 26, 2013: Created module. -Viraj Pandya
 '''
 
 import pyfits
+import shutil
 
 # PyRAF is the main program used to reduce, extract, and calibrate data.
 from pyraf import iraf
@@ -626,12 +627,15 @@ def run_odcombine(inputlistseq,finalspectrumname,saltgain,customRun=False):
 
 # This function creates a copy of a FITS file and preserves the 2-extension structure.
 def run_imcopy(inputname,outputname,numExt=2,customRun=False):	
+	shutil.copyfile(inputname,outputname) # careful, this will overwrite outputname if it already exists
+	print inputname+' ==> copied to ==> '+outputname
+	''' imcopy seems to cause a weird bug in tasks.scaleFluxScienceSpectra() (not exact copy is created), using shutil instead
 	if numExt == 1:
 		imutil.imcopy(input=inputname+'[0]',output=outputname+'[append]')
 	else:
 		imutil.imcopy(input=inputname+'[0]',output=outputname+'[append]')
 		imutil.imcopy(input=inputname+'[1]',output=outputname+'[append]')
-		
+	'''	
 		
 # This function deletes a file.
 def run_imdel(inputname,customRun=False):
