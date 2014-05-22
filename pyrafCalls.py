@@ -308,9 +308,44 @@ def run_apall(twodimage,spectrum,saltgain,faint,customRun=False):
 			else:
 				print "Invalid input: you must enter a column number between 0 and 3100."		
 		apextract.apall.line=int(colAnswer)
-	if faint=='4': # faint with extended galaxy emission (add local bkg counts; subtract local bkg)
+	if faint=='4': # faint supernova (continuum source) w/ local bkg subtraction
 		apextract.apall.nsum=-1000
 		apextract.apall.background='fit' # to subtract local background for extended galaxy emission behind object
+		apextract.apall.t_nsum=50
+		apextract.apall.t_step=15
+		apextract.apall.t_nlost=100
+		apextract.apall.t_niterate = 3 
+		apextract.apall.t_naverage = 1
+		apextract.apall.t_grow = 1.0
+		# ask user to input a column where the SN is bright enough to start tracing from
+		while True:
+			colAnswer = raw_input("Please enter a column number where the SN is easily visible and can be traced: ")
+			if int(colAnswer) > 0 or int(colAnswer) < 3100: # temporarily hard-coded upper limit for 2x4 binning and PG0900 grating
+				break
+			else:
+				print "Invalid input: you must enter a column number between 0 and 3100."		
+		apextract.apall.line=int(colAnswer)
+	if faint=='5' or faint == '7': # faint non-continuum source w/ local bkg subtraction (7 => use non-global-bkg rectified image)
+		apextract.apall.nsum=-3
+		apextract.apall.background='fit' # to subtract local background for extended galaxy emission behind object
+		apextract.apall.b_naverage = -3
+		apextract.apall.t_nsum=50
+		apextract.apall.t_step=15
+		apextract.apall.t_nlost=100
+		apextract.apall.t_niterate = 3 
+		apextract.apall.t_naverage = 1
+		apextract.apall.t_grow = 1.0
+		# ask user to input a column where the SN is bright enough to start tracing from
+		while True:
+			colAnswer = raw_input("Please enter a column number where the SN is easily visible and can be traced: ")
+			if int(colAnswer) > 0 or int(colAnswer) < 3100: # temporarily hard-coded upper limit for 2x4 binning and PG0900 grating
+				break
+			else:
+				print "Invalid input: you must enter a column number between 0 and 3100."		
+		apextract.apall.line=int(colAnswer)
+	if faint=='6': # faint non-continuum source without local bkg subtraction
+		apextract.apall.nsum=-3
+		apextract.apall.background='none' # to subtract local background for extended galaxy emission behind object
 		apextract.apall.t_nsum=50
 		apextract.apall.t_step=15
 		apextract.apall.t_nlost=100
@@ -569,7 +604,7 @@ def run_calibrate(scienceimage,fluximage,sensfilename,customRun=False):
 	onedspec.calibrate.sensitivity=sensfilename # the sensitivity function for flux calibration
 	onedspec.calibrate.ignoreaps='yes' # look for and use sens*, not sens*0001, sens*0002, etc.
 	# This stores some header information from the science image
-	scihdr = pyfits.getheader(scienceimage,1)
+	scihdr = pyfits.getheader(scienceimage,0)
 	exptime = scihdr['EXPTIME']
 	airmass = abs(scihdr['AIRMASS'])
 	# this continues to set the necessary parameters of onedspec.standard

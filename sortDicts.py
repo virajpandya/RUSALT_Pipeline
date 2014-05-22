@@ -48,6 +48,11 @@ def sort():
 	for n,s in enumerate(possiblestandards):
 		snew = s.split('.')
 		possiblestandards[n] = snew[0][1:].lower()
+	# this sorts pysalt arc identify files if present (specific name structure: arcxx.xxsolyyy.db)
+	for sol in glob('arc*.db'):
+		sol_angle = sol[3:8]
+		dicts.wavesols[sol_angle] = sol
+		print "*****Found and sorted "+sol+" for angle: "+sol_angle
 	# This loops through all the images and sorts them into one of the 4 dictionaries from above based on type and gr-angle.
 	for img in images:	
 		print "sorting: "+img
@@ -252,4 +257,7 @@ def sort():
 	print dicts.dispstandards
 	print 'Sensitivity function files:'
 	print dicts.sensfiles
+	if dicts.wavesols != {}:
+		print "Existing wavelength solutions for PySALT: "
+		print dicts.wavesols
 

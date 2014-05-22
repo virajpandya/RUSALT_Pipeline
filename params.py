@@ -36,11 +36,13 @@ standardsPath = '/home/viraj/orion/python/pysalt/data/standards/spectroscopic/'
 # There are two px limits (+/- error): for CCDSUM='2 4' (2x4 binning) or '4 4' (4x4).
 # The pipeline will use either one of these based on header keywords.
 # The structure is a tuple of 2 tuples: ((chip1min,chip1max),(chip2min,chip2max))
+chipGapPix22 = ((1010,1095),(2085,2160)) # added 2014-05-15 for Luke Hovey's SNR - VP
 chipGapPix24 = ((1035,1121),(2115,2191))
 chipGapPix44 = ((500,551),(1035,1091))
 
 # 'SLOW' and 'FAINT' RSS multiplicative gain = simple average of values for each of the 6 amps
 gain = 2.44
+gain_dict = {'faint_slow':2.44}
 
 
 

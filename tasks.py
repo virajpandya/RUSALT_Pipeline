@@ -579,11 +579,15 @@ def specidentifyarcs(arcimages=dicts.flatarcs,indiv=False):
 			print 'Could not find the proper linelist for '+lamp+' lamp.'
 			continue
 		while True:
-			# this sets the name for the output wavelength solution file which will be produced by saltspec.specidentify
-			idfilesci = 'arc'+str(angle)+'sol'+suffix+'.db'
-			# idfilestd = 'arcid'+str(angle)+'_std.db'
-			# this calls the run_specidentify function found further below
-			pyrafCalls.run_specidentify(arcimage=flatarc,lamplines=linelistpath,idfile=idfilesci,customRun=indiv)
+			if dicts.wavesols.get(angle,'') != '':
+				print "***** Using existing wavelength solution: "+dicts.wavesols.get(angle)
+				idfilesci = dicts.wavesols.get(angle)
+			else:
+				# this sets the name for the output wavelength solution file which will be produced by saltspec.specidentify
+				idfilesci = 'arc'+str(angle)+'sol'+suffix+'.db'
+				# idfilestd = 'arcid'+str(angle)+'_std.db'
+				# this calls the run_specidentify function found further below
+				pyrafCalls.run_specidentify(arcimage=flatarc,lamplines=linelistpath,idfile=idfilesci,customRun=indiv)
 			# this updates the header of flatarc with 'RUPIPE' and 'RUIMGTYP' and idfile name
 			hdulist = pyfits.open(flatarc,mode='update')
 			hdr = hdulist[0].header
@@ -908,21 +912,27 @@ def extractsciences(scienceimages=dicts.backgroundsciences,wavescispectra=dicts.
 		# if the user says the line is very faint, then apall is run with a different set of parameters
 		print "1: Spectrum looks BRIGHT. (No local background subtraction.)"
 		print "2: Spectrum looks BRIGHT but has extended galaxy emission (local background subtraction)."
-		print "3: Spectrum looks FAINT. (No local background subtraction; good for host galaxy.)"
-		print "4: Spectrum looks FAINT but has extended galaxy emission (local background subtraction)."
-		print "For 4, a pre-sky-subtracted level will be re-added to the background-subtracted image."
+		print "3: Spectrum looks FAINT. (No local background subtraction.)"
+		print "4: Spectrum looks FAINT with continuum emission (need local background subtraction)."
+		print "5: Spectrum has NO continuum emission (need local background subtraction)."
+		print "6: Spectrum has NO continuum emission (NO local background subtraction)."
+		print "7: Spectrum has NO continuum emission (NO global bkg; YES local bkg)."
+		print "For 4 & 5, a pre-sky-subtracted level will be re-added to the background-subtracted image."
 		while True:
-			answer = raw_input("Please enter 1, 2, 3 or 4 based on the above options: ")
-			if answer == '1' or answer == '2' or answer == '3' or answer == '4':
+			answer = raw_input("Please enter 1, 2, 3, 4, 5, 6 or 7 based on the above options: ")
+			if answer == '1' or answer == '2' or answer == '3' or answer == '4' or answer == '5' or answer == '6' or answer == '7':
 				break
 			else:
-				print "Invalid input. You must enter either 1, 2, 3 or 4."
+				print "Invalid input. You must enter either 1, 2, 3, 4, 5, 6 or 7."
 		# declares output filenames and calls run_apall function
 		name = 'sci'+str(angle)+'ext'+suffix+'.fits'
 		auxname = 'sci'+str(angle)+'ext'+suffix+'AUX'+'.fits'
-		if answer == '4':
+		if answer == '4' or answer == '5' or answer == '6' or answer == '7':
 			# Ask user for an estimate of the median local background around the spectrum in the non-background-subtracted image.
 			wavescience = wavescispectra[angle] # non-background-subtracted science image
+			if answer == '7':
+				bkgscience = wavescience
+				print "Using non-global-background image for extraction"
 			d = ds9.ds9(start=True)
 			hdulist = pyfits.open(wavescience)
 			try:
@@ -934,23 +944,24 @@ def extractsciences(scienceimages=dicts.backgroundsciences,wavescispectra=dicts.
 				d.set('file '+wavescience)
 				d.set('zoom to fit')
 				d.set('zscale')
-			print "You chose option 4. The non-background-subtracted image has been opened in ds9."
-			while True:
-				pssl = raw_input("Please enter an estimate of the median local background level around the spectrum: ")
-				if pssl != '': # need actual error condition using pssl
-					break
-				else:
-					print "Invalid input. Use ds9 to estimate the median local background level around the spectrum."
-			# add pssl to background-subtracted image (overwrite it)
-			pyrafCalls.run_imarithGeneral(op1=bkgscience+'[1]',op2=pssl,oper='+',outname='tempapall.fits',customRun=False)
-			hdu = pyfits.open('tempapall.fits')
-			datnew = hdu[0].data.copy()
-			hdu.close()
-			hdu = pyfits.open(bkgscience,mode='update')
-			hdu[1].data = datnew
-			hdu.flush()
-			hdu.close()
-			os.remove('tempapall.fits')
+			print "You chose option "+answer+". The non-background-subtracted image has been opened in ds9."
+			if answer != '7':
+				while True:
+					pssl = raw_input("Please enter an estimate of the median local background level around the spectrum: ")
+					if pssl != '': # need actual error condition using pssl
+						break
+					else:
+						print "Invalid input. Use ds9 to estimate the median local background level around the spectrum."
+				# add pssl to background-subtracted image (overwrite it)
+				pyrafCalls.run_imarithGeneral(op1=bkgscience+'[1]',op2=pssl,oper='+',outname='tempapall.fits',customRun=False)
+				hdu = pyfits.open('tempapall.fits')
+				datnew = hdu[0].data.copy()
+				hdu.close()
+				hdu = pyfits.open(bkgscience,mode='update')
+				hdu[1].data = datnew
+				hdu.flush()
+				hdu.close()
+				os.remove('tempapall.fits')
 		pyrafCalls.run_apall(twodimage=bkgscience,spectrum=auxname,saltgain=thegain,faint=answer,customRun=indiv)
 		# sets output filenames and calls run_apall function
 		pyrafCalls.run_imcopy(inputname=bkgscience,outputname=name)
@@ -965,7 +976,7 @@ def extractsciences(scienceimages=dicts.backgroundsciences,wavescispectra=dicts.
 		hdunew[1].data = datnew
 		hdunew[1].header = hdrnew
 		hdunew.flush()
-		if answer == '0' or answer == '2': # for spectra without background, add a 4th band with temporary data which will be replaced in extractSciSigma(...)
+		if answer == '1' or answer == '3' or answer == '6': # for spectra without background, add a 4th band with temporary data which will be replaced in extractSciSigma(...)
 			dat4 = np.array([[datnew[2][0]]])
 			datnew = np.concatenate((datnew,dat4))
 			hdunew[1].data = datnew
@@ -1234,8 +1245,12 @@ def extractSciSigma(scienceimages=dicts.wavesciences,refsciences=dicts.backgroun
 		newband4 = dataps[3] 
 		hdumain = pyfits.open(mainsci,mode='update')
 		datmain = hdumain[1].data.copy()
-		datmain[2] = newband3 # this assumes that mainsci has well-defined sky and sigma numpy arrays, else index error will occur
-		datmain[3] = newband4
+		if len(datmain) == 4:	
+			datmain[2] = newband3 # this assumes that mainsci has well-defined sky and sigma numpy arrays, else index error will occur
+			datmain[3] = newband4
+		elif len(datmain) == 3: # apall option #3, no local bkg subtraction ==> no sky spectrum (band 3 becomes sigma spectrum)
+			#datmain[2] = newband3
+			print "!!!!! Only 3 bands in extracted spectrum; not replacing sky and sigma spectra."
 		hdumain[1].data = datmain
 		hdumain.flush()
 		hdrm = hdumain[0].header
@@ -1512,6 +1527,9 @@ def maskspectra(dispscispectra=dicts.dispsciences,dispstdspectra=dicts.dispstand
 			elif ccdsum == '4 4': # 4x4 binning
 				c1min,c1max = params.chipGapPix44[0]
 				c2min,c2max = params.chipGapPix44[1]
+			elif ccdsum == '2 2': # 2x2 binning
+				c1min,c1max = params.chipGapPix22[0]
+				c2min,c2max = params.chipGapPix22[1]
 			hdusci.close()
 			datbwm = hdubwm[0].data.copy()
 			datbwm = datbwm[0][0] # spectrum bad wavelength mask is in "band 0" (rest is sky, noise, etc.)
@@ -1550,6 +1568,9 @@ def maskspectra(dispscispectra=dicts.dispsciences,dispstdspectra=dicts.dispstand
 			elif ccdsum == '4 4': # 4x4 binning
 				c1min,c1max = params.chipGapPix44[0]
 				c2min,c2max = params.chipGapPix44[1]
+			elif ccdsum == '2 2': # 2x2 binning
+				c1min,c1max = params.chipGapPix22[0]
+				c2min,c2max = params.chipGapPix22[1]
 			hdustd.close()
 			datbwm = hdubwm[0].data.copy()
 			datbwm = datbwm[0][0] # spectrum bad wavelength mask is in "band 0" (rest is sky, noise, etc.)
@@ -1598,6 +1619,9 @@ def fluxcal(dspsci=dicts.dispsciences,dspstd=dicts.dispstandards,indiv=False):
 		elif ccdsum == '4 4': # 4x4 binning
 			c1min,c1max = params.chipGapPix44[0]
 			c2min,c2max = params.chipGapPix44[1]
+		elif ccdsum == '2 2': # 2x2 binning
+			c1min,c1max = params.chipGapPix22[0]
+			c2min,c2max = params.chipGapPix22[1]
 		hdulist.close()
 		# this stores the filename of the corresponding standard star image and the class of standard star it is
 		dspstandard = dspstd[angle]
@@ -1718,7 +1742,7 @@ def fluxcal(dspsci=dicts.dispsciences,dspstd=dicts.dispstandards,indiv=False):
 			hdrsens = hdusens[0].header
 			hdrsens.update('GR-ANGLE',float(angle))
 			hdrsens['RUPIPE'] = 'g'
-			hdrsens['RUIMGTYPE'] = 'sensfunc'
+			hdrsens['RUIMGTYP'] = 'sensfunc'
 			hdusens.flush()
 			hdusens.close()
 			# this adds the sens file to the sensfiles dictionary
@@ -1952,6 +1976,9 @@ def scaleFluxScienceSpectra(sciencespectra=dicts.fluxsciences,indiv=False):
 		elif ccdsum == '4 4': # 4x4 binning
 			c1min,c1max = params.chipGapPix44[0]
 			c2min,c2max = params.chipGapPix44[1]
+		elif ccdsum == '2 2': # 2x2 binning
+			c1min,c1max = params.chipGapPix22[0]
+			c2min,c2max = params.chipGapPix22[1]
 		hdu1.close()
 		wave1 = np.linspace(crval1,crval1+cd1*(len(dat1)-crpix1),len(dat1)) # wavelength array for science spectrum 1
 		# get rid of the chip gaps in spectrum 0
@@ -2063,6 +2090,9 @@ def scaleFluxScienceSpectra(sciencespectra=dicts.fluxsciences,indiv=False):
 			elif ccdsum == '4 4': # 4x4 binning
 				c1min,c1max = params.chipGapPix44[0]
 				c2min,c2max = params.chipGapPix44[1]
+			elif ccdsum == '2 2': # 2x2 binning
+				c1min,c1max = params.chipGapPix22[0]
+				c2min,c2max = params.chipGapPix22[1]
 			hducur.close()
 			wavec = np.linspace(crvalc,crvalc+cdc*(len(datc)-crpixc),len(datc)) # current science spectrum wavelength array
 			# get rid of the chip gaps (based on their ~invariant pixel numbers) for reference spectrum
@@ -2192,6 +2222,9 @@ def scaleFluxScienceSpectra(sciencespectra=dicts.fluxsciences,indiv=False):
 					elif ccdsum == '4 4': # 4x4 binning
 						c1min,c1max = params.chipGapPix44[0]
 						c2min,c2max = params.chipGapPix44[1]
+					elif ccdsum == '2 2': # 2x2 binning
+						c1min,c1max = params.chipGapPix22[0]
+						c2min,c2max = params.chipGapPix22[1]
 					hducur.close()
 					wavec = np.linspace(crvalc,crvalc+cdc*(len(datc)-crpixc),len(datc)) # current science spectrum wavelength array
 					# even though these are scaled spectra, the chip gaps are not gone so follow similar procedure as in round 1
@@ -2271,7 +2304,7 @@ def scaleStdStarSpectra(stdspectra=dicts.fluxstandards,indiv=False):
 	# This begins the flux-scaling process for the flux-calibrated standard star spectra.
 	angles = stdspectra.keys()
 	if len(angles) == 1: # if only one flux-calibrated spectrum, no other spectra to compare to
-		print 'There is only one flux-calibrated spectrum -- the one with angle: '+angle
+		print 'There is only one flux-calibrated spectrum -- the one with angle: '+angles[0]
 		print 'Cannot scale a single spectrum.'
 		print 'Skipping flux scaling.'
 		return
@@ -2313,6 +2346,9 @@ def scaleStdStarSpectra(stdspectra=dicts.fluxstandards,indiv=False):
 		elif ccdsum == '4 4': # 4x4 binning
 			c1min,c1max = params.chipGapPix44[0]
 			c2min,c2max = params.chipGapPix44[1]
+		elif ccdsum == '2 2': # 2x2 binning
+			c1min,c1max = params.chipGapPix22[0]
+			c2min,c2max = params.chipGapPix22[1]
 		hdu1.close()
 		wave1 = np.linspace(crval1,crval1+cd1*(len(dat1)-crpix1),len(dat1)) # wavelength array for std spectrum 1
 		# get rid of the chip gaps in spectrum 0
@@ -2424,6 +2460,9 @@ def scaleStdStarSpectra(stdspectra=dicts.fluxstandards,indiv=False):
 			elif ccdsum == '4 4': # 4x4 binning
 				c1min,c1max = params.chipGapPix44[0]
 				c2min,c2max = params.chipGapPix44[1]
+			elif ccdsum == '2 2': # 2x2 binning
+				c1min,c1max = params.chipGapPix22[0]
+				c2min,c2max = params.chipGapPix22[1]
 			hducur.close()
 			wavec = np.linspace(crvalc,crvalc+cdc*(len(datc)-crpixc),len(datc)) # current std spectrum wavelength array
 			# get rid of the chip gaps (based on their ~invariant pixel numbers) for reference spectrum
@@ -2552,6 +2591,9 @@ def scaleStdStarSpectra(stdspectra=dicts.fluxstandards,indiv=False):
 					elif ccdsum == '4 4': # 4x4 binning
 						c1min,c1max = params.chipGapPix44[0]
 						c2min,c2max = params.chipGapPix44[1]
+					elif ccdsum == '2 2': # 2x2 binning
+						c1min,c1max = params.chipGapPix22[0]
+						c2min,c2max = params.chipGapPix22[1]
 					hducur.close()
 					wavec = np.linspace(crvalc,crvalc+cdc*(len(datc)-crpixc),len(datc)) # current std spectrum wavelength array
 					# even though these are scaled spectra, the chip gaps are not gone so follow similar procedure as in round 1
@@ -2753,7 +2795,7 @@ def scaleDispScienceSpectra(sciencespectra=dicts.dispsciences,indiv=False):
 	# This begins the count-scaling process for the dispersion-corrected science spectra.
 	angles = sciencespectra.keys()
 	if len(angles) == 1: # if only one dispersion-corrected spectrum, no other spectra to compare to
-		print 'There is only one dispersion-corrected spectrum -- the one with angle: '+angle
+		print 'There is only one dispersion-corrected spectrum -- the one with angle: '+angles[0]
 		print 'Cannot scale a single spectrum.'
 		print 'Skipping flux scaling.'
 		return
@@ -2799,6 +2841,9 @@ def scaleDispScienceSpectra(sciencespectra=dicts.dispsciences,indiv=False):
 		elif ccdsum == '4 4': # 4x4 binning
 			c1min,c1max = params.chipGapPix44[0]
 			c2min,c2max = params.chipGapPix44[1]
+		elif ccdsum == '2 2': # 2x2 binning
+			c1min,c1max = params.chipGapPix22[0]
+			c2min,c2max = params.chipGapPix22[1]
 		hdu1.close()
 		wave1 = np.linspace(crval1,crval1+cd1*(len(dat1)-crpix1),len(dat1)) # wavelength array for science spectrum 1
 		# get rid of the chip gaps in spectrum 0
@@ -2915,6 +2960,9 @@ def scaleDispScienceSpectra(sciencespectra=dicts.dispsciences,indiv=False):
 			elif ccdsum == '4 4': # 4x4 binning
 				c1min,c1max = params.chipGapPix44[0]
 				c2min,c2max = params.chipGapPix44[1]
+			elif ccdsum == '2 2': # 2x2 binning
+				c1min,c1max = params.chipGapPix22[0]
+				c2min,c2max = params.chipGapPix22[1]	
 			hducur.close()
 			wavec = np.linspace(crvalc,crvalc+cdc*(len(datc)-crpixc),len(datc)) # current science spectrum wavelength array
 			# get rid of the chip gaps (based on their ~invariant pixel numbers) for reference spectrum
