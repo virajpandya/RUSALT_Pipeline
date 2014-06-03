@@ -45,29 +45,29 @@ def tofits(filename, data, hdr=None,clobber=False):
 def preservefits(oldfilename,newfilename,auxfilename,keys=[],newheader=False,data_ext=1):
     shutil.copyfile(oldfilename,newfilename)
     if auxfilename != '':
-	    hduaux = pyfits.open(auxfilename)
-	    dataaux = hduaux[0].data.copy() # data from auxiliary output by IRAF task
-	    hdraux = hduaux[0].header.copy() # header from aux output by IRAF task, good for apall/1d-identify, etc.
-	    hduaux.close()
-	    hdunew = pyfits.open(newfilename,mode='update')
-	    hdunew[data_ext].data = dataaux # simply replace the old data
-	    if newheader == True: # replace the header of data_ext with the aux header
-		    hdraux.update('EXTNAME','SCI') # IRAF doesn't maintain these next two keywords
-		    hdraux.update('EXTVER',data_ext)
-		    hdunew[data_ext].header = hdraux
-	    for k in keys:
-		    (hdunew[0].header)[k] = hdraux[k] # e.g., avg EXPTIME
-		    (hdunew[data_ext].header)[k] = hdraux[k]
-	    hdunew.flush(output_verify='ignore')
-	    hdunew.close()
-	    os.remove(auxfilename)
-		
+        hduaux = pyfits.open(auxfilename)
+        dataaux = hduaux[0].data.copy() # data from auxiliary output by IRAF task
+        hdraux = hduaux[0].header.copy() # header from aux output by IRAF task, good for apall/1d-identify, etc.
+        hduaux.close()
+        hdunew = pyfits.open(newfilename,mode='update')
+        hdunew[data_ext].data = dataaux # simply replace the old data
+        if newheader == True: # replace the header of data_ext with the aux header
+            hdraux.update('EXTNAME','SCI') # IRAF doesn't maintain these next two keywords
+            hdraux.update('EXTVER',data_ext)
+            hdunew[data_ext].header = hdraux
+        for k in keys:
+            (hdunew[0].header)[k] = hdraux[k] # e.g., avg EXPTIME
+            (hdunew[data_ext].header)[k] = hdraux[k]
+        hdunew.flush(output_verify='ignore')
+        hdunew.close()
+        os.remove(auxfilename)
+        
 def tods9(filename):
     d = ds9.ds9(start=True)
     d.set('file '+filename)
     d.set('zoom to fit')
     d.set('zscale')
-    print filename+' has been briefly opened in ds9.'
+    print 'DS9: '+filename+' has been briefly opened.'
     
 def run(dostages='all',stdstar = False,interactive = False, files = None):
     #Make sure the stages parameters makes sense
@@ -182,9 +182,9 @@ def get_ims(fs,imtype):
     grangles = []
     for f in fs:
         if pyfits.getval(f,'OBSTYPE')==typekeys[imtype]: 
-            flats.append(f)
+            ims.append(f)
             grangles.append(pyfits.getval(f,'GR-ANGLE'))
-    return array(flats),array(grangles)
+    return array(ims),array(grangles)
 
 def run_makeflats(fs=None):
     #Note the list of files need to not include any paths relative to the work directory
@@ -339,13 +339,14 @@ def run_mosaic(fs=None):
     
     if not os.path.exists('mos'):os.mkdir('mos')
     for i,f in enumerate(ims): 
-            fname =  f.split('/')[1]
-            typestr = fname[:3]
-            #by our naming convention, these should be the last 3 characters before the '.fits'
-            imnum = fname[-8:-5]
-            outname = 'mos/'+typestr+'%0.2fmos%03i.fits'%(ga,imnum)
-            iraf.unlearn(iraf.saltmosaic) ; iraf.flpr()# prepare to run saltmosaic
-            iraf.saltmosaic(images=f,outimages=outname,outpref='',clobber=True,mode='h') 
+        ga = gas[i]
+        fname =  f.split('/')[1]
+        typestr = fname[:3]
+        #by our naming convention, these should be the last 3 characters before the '.fits'
+        imnum = fname[-8:-5]
+        outname = 'mos/'+typestr+'%0.2fmos%03i.fits'%(ga,imnum)
+        iraf.unlearn(iraf.saltmosaic) ; iraf.flpr()# prepare to run saltmosaic
+        iraf.saltmosaic(images=f,outimages=outname,outpref='',clobber=True,mode='h') 
 
 
 def run_identify2d(fs=None):
@@ -364,49 +365,48 @@ def run_identify2d(fs=None):
         # find lamp and corresponding linelist
         lamp = pyfits.getval(f,'LAMPID')
         print 'the lamp is '+lamp+' for '+f 
-         # linelistpath is a global variable defined in beginning, path to where the line lists are.
-        try{lamplines = lineListPath+lampfiles[lamp]}
-        catch{}
+        # linelistpath is a global variable defined in beginning, path to where the line lists are.
+        try: lamplines = lineListPath+lampfiles[lamp]
+        except KeyError:
+            print('Could not find the proper linelist for '+lamp+' lamp.')
+            raise
         
-	    
-		print 'Could not find the proper linelist for '+lamp+' lamp.'
-		return
-	    # run pysalt specidentify
-	    idfile = 'sol/arc%0.2fsol'%(ga)+'.fits' # no need for imgnum complications
-	    iraf.unlearn(iraf.specidentify)
-	    iraf.specidentify(images=f,linelist=lamplines,outfile=idfile,guesstype='rss',automethod='Matchlines',
-					      function='legendre',order=3,rstep=100,rstart='middlerow',mdiff=5,inter='yes',
-					      startext=1,clobber='yes',verbose='yes')
+        # run pysalt specidentify
+        idfile = 'sol/arc%0.2fsol'%(ga)+'.fits' # no need for imgnum complications
+        iraf.unlearn(iraf.specidentify)
+        iraf.specidentify(images=f,linelist=lamplines,outfile=idfile,guesstype='rss',automethod='Matchlines',
+        			      function='legendre',order=3,rstep=100,rstart='middlerow',mdiff=5,inter='yes',
+        			      startext=1,clobber='yes',verbose='yes')
 
 def run_rectify(fs=None):
-    if fs is None: fs = glob('sol/arc*sol*.fits') 
+    if fs is None: fs = glob('sol/arc*sol*.db') 
     if len(fs)==0:
         print "ERROR: No wavelength solutions for rectification."
         return
     # rectify each sci/arc and pop it open briefly in ds9
-    (scifs,scigas),(arcfs,arcgas) = get_scis(glob('*mos*.fits')),get_arcs(glob('*mos*.fits'))
+    (scifs,scigas),(arcfs,arcgas) = get_ims(glob('mos/*mos*.fits'),'sci'),get_ims(glob('mos/*mos*.fits'),'arc')
     if not os.path.exists('rec'):os.mkdir('rec')
     for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
-	    for i,f in enumerate(groupfs): 
-		    if f in scifs: typestr = 'sci'
-		    else: typestr = 'arc'
-		    ga,imgnum = groupgas[i],f[11:f.index('.fits')]
-		    outfile = 'rec/'+typestr+'%0.2frec'%(ga)+imgnum+'.fits'
-		    iraf.unlearn(iraf.specrectify)
-		    iraf.specrectify(images=f,outimages=outfile,solfile='arc%0.2fsol'%(ga)+'.fits',outpref='',caltype='line',
+        for i,f in enumerate(groupfs): 
+            if f in scifs: typestr = 'sci'
+            else: typestr = 'arc'
+            ga,imgnum = groupgas[i],f[11:f.index('.fits')]
+            outfile = 'rec/'+typestr+'%0.2frec'%(ga)+imgnum+'.fits'
+            iraf.unlearn(iraf.specrectify)
+            iraf.specrectify(images=f,outimages=outfile,solfile='arc%0.2fsol'%(ga)+'.fits',outpref='',caltype='line',
 						     function='legendre',order=3,inttype='interp',clobber='yes',verbose='yes') 	   		  
-		    tods9(outfile)
+            tods9(outfile)
 
     # I think this step should just be combined with the identify2d() step, 
     # or at least the arc rectifications to verify good sol -VP
 
-def split_by_chip(fs=None):
-   if fs is None: fs = glob('rec/*rec*.fits') 
-   if len(fs)==0:
-       print "ERROR: No rectified images to split by chip."
-       return
+def run_unmosaic(fs=None):
+    if fs is None: fs = glob('rec/*rec*.fits') 
+    if len(fs)==0:
+        print "ERROR: No rectified images to split by chip."
+        return
     # Grab the rectified science images (only they need to be split up for bkg+lax)
-    (scifs,scigas) = get_scis(fs)
+    (scifs,scigas) = get_ims(fs,'sci')
     # Pixel begin:end numbers (+/- epsilon included) for chip gaps based on different CCDSUM header key values (binning)
     chipGapPix = {'2 2':((1010,1095),(2085,2160)),'2 4':((1035,1121),(2115,2191)),'4 4':((500,551),(1035,1091))}
     # Split each image into 3 imgs such that the middle img has both chip gaps, and the other 2 imgs don't have chip gaps
@@ -417,9 +417,9 @@ def split_by_chip(fs=None):
         data = hdu[1].data.copy()
         hdr1 = hdu[1].header.copy()
         for c in range(1,4):
-            if c == 1: tofits(f[:-5]+'c1.fits',data[0:c1min],hdr=hdr1) # same rec directory, just adding c# before '.fits'
-            elif c == 2: tofits(f[:-5]+'c2.fits',data[c1min:c2max+1],hdr=hdr1)    
-            elif c == 3: tofits(f[:-5]+'c3.fits',data[c2max+1:],hdr=hdr1)               
+            if c == 1: tofits(f[:-5]+'c1.fits',data[:,0:c1min],hdr=hdr1) # same rec directory, just adding c# before '.fits'
+            elif c == 2: tofits(f[:-5]+'c2.fits',data[:,c1min:c2max+1],hdr=hdr1)    
+            elif c == 3: tofits(f[:-5]+'c3.fits',data[:,c2max+1:],hdr=hdr1)               
     
 
 def run_createbpm(fs=None):
@@ -429,7 +429,7 @@ def run_createbpm(fs=None):
         return
     
     # Get rectified science images and gr-angles (individual chips)
-    (scifs,scigas) = get_scis(fs)
+    (scifs,scigas) = get_ims(fs,'sci')
     if not os.path.exists('bpm'):os.mkdir('bpm')
     for i,f in enumerate(scifs):
         # the outfile name is very similar, just change folder prefix and 3-char stage substring
@@ -440,13 +440,13 @@ def run_createbpm(fs=None):
         pyfits.setval(f,'BPM',value=outfile) # will be propagated down throughout the stages ;)   
     
 def run_background(fs=None):
-   if fs is None: fs = glob('rec/*rec*c*.fits') 
-   if len(fs)==0:
-       print "ERROR: No rectified chip-based images for 2D-background-subtraction."
-       return
+    if fs is None: fs = glob('rec/*rec*c*.fits') 
+    if len(fs)==0:
+        print "ERROR: No rectified chip-based images for 2D-background-subtraction."
+        return
     
     # Get rectified science images and gr-angles
-    (scifs,scigas) = get_scis(fs)
+    (scifs,scigas) = get_ims(fs,'sci')
     if not os.path.exists('bkg'):os.mkdir('bkg')
     for i,f in enumerate(scifs):
         # Run automated 2D background subtraction on each individual chip image
@@ -471,7 +471,7 @@ def run_lax(fs=None):
         return
     
     # Get background-subtracted chip-based science images and gr-angles.
-    (scifs,scigas) = get_scis(fs)
+    (scifs,scigas) = get_ims(fs,'sci')
     if not os.path.exists('lax'):os.mkdir('lax')
     for i,f in enumerate(scifs):
         outname_img = 'lax/'+f[4:12]+'lax'+f[15:]
@@ -497,7 +497,35 @@ def run_lax(fs=None):
         hdu.close()
         
     
-def remosaic_chips(fs=None):
+def run_remosaic(fs=None): 
+    '''
+    Our algorithm currently involves running apall on the non-2D-bkg-subtracted images
+    so we can just use the non-split_by_chip()-processed rectified images.
+    But also, instead of using the lacosmicx output science images, we want to manually
+    flag all cosmic rays in the rectified image's BPM based on the lacosmicx cosmic ray pixel mask (CPM).
+    So for now (unless we change the algorithm), we just want to mosaic the BPM and CPM images. - VP
+    '''
+    fs = glob('bpm/*bpm*.fits')
+    if len(fs)==0:
+        print "ERROR: No bad pixel masks to remosaic." # without BPM, wouldn't have made CPM anyway, so this check is sufficient
+        return
+    
+    # Loop over the mosaiced rectified science images
+    (scifs,scigas) = get_ims(glob('rec/*rec*.fits'),'sci')
+    for i,f in enumerate(scifs):
+        ga,imgnum = scigas[i],f[11:f.index('.fits')]
+        outfile_bpm = 'bpm/'+f[4:12]+'bpm'+imgnum+'.fits' # gets rid of the 'c#' before '.fits'
+        outfile_cpm = 'lax/'+f[4:12]+'cpm'+imgnum+'.fits'
+        # Create BPM mosaic
+        chips = []
+        for c in range(1,4):
+            bpmfile = 'bpm/'+f[4:12]+'bpm'+imgnum+'c%i'%(c)+'.fits' # naming convention is very similar
+            
+            
+        
+        # Create CPM mosaic
+    
+    
     # for each rectified (non-split) image, make a copy
     # use numpy to remosaic three lacosmicx-processed chips according to pixel #
     # replace data in copied rectified image with re-mosaiced chips
