@@ -514,22 +514,22 @@ def run_remosaic(fs=None):
     (scifs,scigas) = get_ims(glob('rec/*rec*.fits'),'sci')
     for i,f in enumerate(scifs):
         ga,imgnum = scigas[i],f[11:f.index('.fits')]
-        outfile_bpm = 'bpm/'+f[4:12]+'bpm'+imgnum+'.fits' # gets rid of the 'c#' before '.fits'
-        outfile_cpm = 'lax/'+f[4:12]+'cpm'+imgnum+'.fits'
-        # Create BPM mosaic
-        chips = []
-        for c in range(1,4):
-            bpmfile = 'bpm/'+f[4:12]+'bpm'+imgnum+'c%i'%(c)+'.fits' # naming convention is very similar
-            
-            
+        folder = {'bpm':'bpm/','cpm':'lax/'} # prefix for outfile names
+        # Create BPM and CPM mosaics
+        for masktype in ['bpm','cpm']:    
+            outfile = folder[masktype]+f[4:12]+masktype+imgnum+'.fits' # gets rid of the 'c#' before '.fits'
+            chips = []
+            for c in range(1,4):
+                maskfile = folder[masktype]+f[4:12]+masktype+imgnum+'c%i'%(c)+'.fits' # naming convention is very similar
+                hdu = pyfits.open(maskfile)
+                data = hdu[0].data.copy()
+                chips.append(data)
+                hdu.close()
+            datamask = np.concatenate(chips,axis=1) # axis 1 is horizontal => the chips will be stacked horizontally
+            tofits(outfile,datamask)
+            # Add 'BPM' or 'CPM' to rectified image header
+            pyfits.setval(f,masktype.upper(),value=outfile) # will be propagated down throughout the stages ;)  
         
-        # Create CPM mosaic
-    
-    
-    # for each rectified (non-split) image, make a copy
-    # use numpy to remosaic three lacosmicx-processed chips according to pixel #
-    # replace data in copied rectified image with re-mosaiced chips
-    return
 
 def run_extract(fs=None):
     #For each science image
