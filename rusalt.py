@@ -344,22 +344,25 @@ def run_flatten(fs = None):
         thishdu.close()
         
 def run_mosaic(fs=None):
-	if fs is None: fs = glob('sci*flt*.fits') # just an existence check; reasonable assumption: no flatsciences ==> no flatarcs
+	# just an existence check; reasonable assumption: no flatsciences ==> no flatarcs
+	if fs is None: fs = glob('sci*flt*.fits') 
     if len(fs)==0:
         print "There are no flat-fielded chip-based files to mosaic."
         return
-    # Grab the previous-stage single-file science images & gr-angles (not the flat-fielded ones since they are separate chip-based images)
-    
+    # Grab the previous-stage single-file science images & gr-angles 
+    # (not the flat-fielded ones since they are separate chip-based images)
     (scifs,scigas),(arcfs,arcgas) = get_scis(glob('pysalt/bxgpP*.fits')),get_arcs(glob('pysalt/bxgpP*.fits'))
 	for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
-		for i,f in enumerate(groupfs): # move all flat-fielded chip-based data into a single multi-fits file for saltmosaic
+		# move all flat-fielded chip-based data into a single multi-fits file for saltmosaic
+		for i,f in enumerate(groupfs): 
 			if f in scifs: typestr = 'sci'
 			else: typestr = 'arc'
 			ga,imgnum = groupfs[i],f[-8:-5]
 			singlefitsName = typestr+'%0.2fflt%03i.fits'%(ga,imgnum)
 			preservefits(oldfilename=f,newfilename=singlefitsName,auxfilename='')
 			hdunew = pyfits.open(singlefitsName,mode='update')
-			for c in range(1,7): # replace data in each extension with flat-fielded chip-based data 
+			# replace data in each extension with flat-fielded chip-based data 
+			for c in range(1,7): 
 				hduc = pyfits.open(typestr+'%0.2fflt%03ic%i.fits'%(ga,imgnum,c))
 				datac = hduc[0].data.copy()
 				hduc.close()
