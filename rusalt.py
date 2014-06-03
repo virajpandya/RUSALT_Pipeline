@@ -16,13 +16,10 @@ iraf.saltspec()
 iraf.twodspec()
 iraf.longslit()
 
-<<<<<<< HEAD
 # System-specific paths for standards, linelists, etc.
 standardsPath = '/usr/local/astro64/iraf/extern/pysalt/data/standards/spectroscopic/'
 lineListPath = '/usr/local/astro64/iraf/extern/pysalt/data/linelists/'
 
-=======
->>>>>>> bb781c4f367d8b9b45b3b610573ee347d0fb1300
 #Define the stages: Pysalt, LAcosmicx, Flatcombine, flatten, 'mosaic', 2D Identify, Rectify, Extract (Sci and Arcs), 1D Identify, 
 #if standard, calculate flux calibration, Flux calibrate, if standard calculate telluric, telluric correction
 allstages = ['pysalt','makeflats','flatten','mosaic','combine2d','identify2d', 'rectify', 'background','lax','extract','identify1d','dispcor1d'
@@ -43,7 +40,6 @@ def tofits(filename, data, hdr=None,clobber=False):
     hdulist = HDUList([hdu])
     hdulist.writeto(filename, clobber=clobber,output_verify='ignore')
     
-<<<<<<< HEAD
 def preservefits(oldfilename,newfilename,auxfilename,newheader=False): # preserves old 0-header (unlike IRAF tasks) + PySALT file structure
 	shutil.copyfile(oldfilename,newfilename)
 	if auxfilename != '':
@@ -60,8 +56,6 @@ def preservefits(oldfilename,newfilename,auxfilename,newheader=False): # preserv
 		hdunew.flush(output_verify='ignore')
 		hdunew.close()
     
-=======
->>>>>>> bb781c4f367d8b9b45b3b610573ee347d0fb1300
 def run(dostages='all',stdstar = False,interactive = False, files = None):
     #Make sure the stages parameters makes sense
     try:  
@@ -181,7 +175,6 @@ def get_flats(fs):
             grangles.append(pyfits.getval(f,'GR-ANGLE'))
     return array(flats),array(grangles)
 
-<<<<<<< HEAD
 def get_scis(fs): 
     #define a list to hold all of the flat filename and the gr angles
     scis = []
@@ -194,33 +187,17 @@ def get_scis(fs):
         if pyfits.getval(f,'OBSTYPE')=='OBJECT': # this is not strong enough to filter out the standards (which also have obstype==object)
             if (pyfits.getval(f,'OBJECT')).lower() in possiblestandards: 
             	continue
-=======
-def get_scis(fs):
-    #define a list to hold all of the flat filename and the gr angles
-    scis = []
-    grangles = []
-    for f in fs:
-        if pyfits.getval(f,'OBSTYPE')=='OBJECT': 
->>>>>>> bb781c4f367d8b9b45b3b610573ee347d0fb1300
             scis.append(f)
             grangles.append(pyfits.getval(f,'GR-ANGLE'))
     return array(scis),array(grangles)
 
 
-<<<<<<< HEAD
 def get_arcs(fs): 
-=======
-def get_arcs(fs):
->>>>>>> bb781c4f367d8b9b45b3b610573ee347d0fb1300
     #define a list to hold all of the flat filename and the gr angles
     arcs = []
     grangles = []
     for f in fs:
-<<<<<<< HEAD
         if pyfits.getval(f,'OBSTYPE')=='ARC':
-=======
-        if pyfits.getval(f,'OBSTYPE')=='ARC': 
->>>>>>> bb781c4f367d8b9b45b3b610573ee347d0fb1300
             arcs.append(f)
             grangles.append(pyfits.getval(f,'GR-ANGLE'))
     return array(arcs),array(grangles)
@@ -340,11 +317,8 @@ def run_flatten(fs = None):
     scifs, scigas = get_scis(fs)
     arcfs, arcgas = get_arcs(fs)
     
-<<<<<<< HEAD
 ##### would be good to do an easy/transparent check that the gr-angles of arcs and scis uniquely match up - VP
     
-=======
->>>>>>> bb781c4f367d8b9b45b3b610573ee347d0fb1300
     ims = append(scifs,arcfs)
     gas = append(scigas, arcgas)
     #For each science and arc image
@@ -368,7 +342,6 @@ def run_flatten(fs = None):
         outname = typestr+'%0.2fflt%03ic%i.fits'%(ga,imnum,c)
         thishdu.writeto(outname)
         thishdu.close()
-<<<<<<< HEAD
         
 def run_mosaic(fs=None):
 	if fs is None: fs = glob('sci*flt*.fits') # just an existence check; reasonable assumption: no flatsciences ==> no flatarcs
@@ -395,12 +368,6 @@ def run_mosaic(fs=None):
 			hdunew.close()
 			iraf.unlearn(iraf.saltmosaic) # prepare to run saltmosaic
 			iraf.saltmosaic(images=singlefitsName,outimages=typestr+'%0.2fmos%03i.fits'%(ga,imgnum),outpref='',clobber=True,mode='h') 
-=======
-def run_mosaic():
-    #Grab the flattened images.
-    #run saltmosaic
-    return
->>>>>>> bb781c4f367d8b9b45b3b610573ee347d0fb1300
 
 def run_combine2d():
     #Grab the mosaiced images
@@ -495,8 +462,4 @@ if __name__ == '__main__':
         (options, args) = parser.parse_args()
         run()
         sys.exit("Thanks for using this pipeline!")
-<<<<<<< HEAD
     
-=======
-    
->>>>>>> bb781c4f367d8b9b45b3b610573ee347d0fb1300
