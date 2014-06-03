@@ -373,33 +373,33 @@ def run_identify2d(fs=None):
         #img num should be right before the .fits
         imgnum = f[-8:-5]
         # run pysalt specidentify
-        idfile = 'id2/arc%0.2fid2%03i'%(ga,imgnum)+'.fits' 
+        idfile = 'id2/arc%0.2fid2%03i'%(ga,imgnum)+'.db' 
         iraf.unlearn(iraf.specidentify); iraf.flpr()
         iraf.specidentify(images=f,linelist=lamplines,outfile=idfile,guesstype='rss',automethod='Matchlines',
         			      function='legendre',order=3,rstep=100,rstart='middlerow',mdiff=5,inter='yes',
         			      startext=1,clobber='yes',verbose='yes')
 
 def run_rectify(fs=None):
-    if fs is None: fs = glob('sol/arc*sol*.db') 
+    if fs is None: fs = glob('id2/arc*id2*.db') 
     if len(fs)==0:
-        print "ERROR: No wavelength solutions for rectification."
+        print "No wavelength solutions for rectification."
         return
     # rectify each sci/arc and pop it open briefly in ds9
-    (scifs,scigas),(arcfs,arcgas) = get_ims(glob('mos/*mos*.fits'),'sci'),get_ims(glob('mos/*mos*.fits'),'arc')
+    scifs,scigas = get_ims(glob('mos/*mos*.fits'),'sci')
+    arcfs,arcgas =get_ims(glob('mos/*mos*.fits'),'arc')
+    
+    ims = append(scifs,arcfs)
+    gas = append(scigas, arcgas)
+    
     if not os.path.exists('rec'):os.mkdir('rec')
-    for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
-        for i,f in enumerate(groupfs): 
+    for i,f in enumerate(ims): 
             if f in scifs: typestr = 'sci'
             else: typestr = 'arc'
-            ga,imgnum = groupgas[i],f[11:f.index('.fits')]
+            ga,imgnum = gas[i],f[-8:-5]
             outfile = 'rec/'+typestr+'%0.2frec'%(ga)+imgnum+'.fits'
-            iraf.unlearn(iraf.specrectify)
+            iraf.unlearn(iraf.specrectify); iraf.flpr()
             iraf.specrectify(images=f,outimages=outfile,solfile='arc%0.2fsol'%(ga)+'.fits',outpref='',caltype='line',
 						     function='legendre',order=3,inttype='interp',clobber='yes',verbose='yes') 	   		  
-            tods9(outfile)
-
-    # I think this step should just be combined with the identify2d() step, 
-    # or at least the arc rectifications to verify good sol -VP
 
 def run_unmosaic(fs=None):
     if fs is None: fs = glob('rec/*rec*.fits') 
