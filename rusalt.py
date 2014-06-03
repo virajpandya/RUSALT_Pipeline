@@ -177,42 +177,15 @@ def run_pysalt(fs=None):
     
     return fs
 
-def get_flats(fs):
-    #define a list to hold all of the flat filename and the gr angles
-    flats = []
+def get_ims(fs,imtype):
+    typekeys ={'sci':'OBJECT','arc':'ARC','flat':'OBJECT'}
+    ims = []
     grangles = []
     for f in fs:
-        if pyfits.getval(f,'OBSTYPE')=='FLAT': 
+        if pyfits.getval(f,'OBSTYPE')==typekeys[imtype]: 
             flats.append(f)
             grangles.append(pyfits.getval(f,'GR-ANGLE'))
     return array(flats),array(grangles)
-
-def get_scis(fs): 
-    #define a list to hold all of the flat filename and the gr angles
-    scis = []
-    grangles = []
-    cwd = os.getcwd()
-	os.chdir(standardsPath) # global variable defined at beginning: path to pysalt standard star bandpass files
-	possiblestandards = glob('m*.dat')
-	os.chdir(cwd)
-    for f in fs:
-        if pyfits.getval(f,'OBSTYPE')=='OBJECT': # this is not strong enough to filter out the standards (which also have obstype==object)
-            if (pyfits.getval(f,'OBJECT')).lower() in possiblestandards: 
-            	continue
-            scis.append(f)
-            grangles.append(pyfits.getval(f,'GR-ANGLE'))
-    return array(scis),array(grangles)
-
-
-def get_arcs(fs): 
-    #define a list to hold all of the flat filename and the gr angles
-    arcs = []
-    grangles = []
-    for f in fs:
-        if pyfits.getval(f,'OBSTYPE')=='ARC':
-            arcs.append(f)
-            grangles.append(pyfits.getval(f,'GR-ANGLE'))
-    return array(arcs),array(grangles)
 
 def run_makeflats(fs=None):
     #Note the list of files need to not include any paths relative to the work directory
@@ -229,7 +202,7 @@ def run_makeflats(fs=None):
     
     #Figure out which images are flats
     #Figure out which grating angles were used
-    allflats, grangles = get_flats(fs)
+    allflats, grangles = get_ims(fs,'flat')
     
     os.mkdir() 
     #For each grating angle
@@ -262,8 +235,8 @@ def run_makeflats(fs=None):
             iraf.unlearn(iraf.illumination); iraf.flpr()
             iraf.illumination(images=combineoutname,illuminations=illumoutname,interactive=False, 
                               naverage=-40, order =11, low_reject=3.0,high_reject=3.0,niterate=5,mode='hl')
-#                         
-#           Flag any pixels in the illumination correction< 0.1
+                         
+            #Flag any pixels in the illumination correction< 0.1
             illumhdu = pyfits.open(illumoutname,mode='update')
             illumhdu[0].data[illumhdu[0].data <= 0.1] = 0.0
             illumhdu.flush()
@@ -278,7 +251,6 @@ def run_makeflats(fs=None):
             
             flat1dfname = 'flats/flt%0.2f1dmc%i.fits'%(ga,c)
             tofits(flat1dfname,flat1d, hdr=combinehdu[0].header.copy())
-
             
             #run response
             resp1dfname = 'flats/flt%0.2f1drc%i.fits'%(ga,c)
@@ -299,7 +271,6 @@ def run_makeflats(fs=None):
             resp1d[abs(resp1d - 1.0) > 5.0 * flatsig] = 1.0
             resp = flat1d/resp1d
             
-            
             resp2dfname = 'flats/flt%0.2resc%i.fits'%(ga,c)
             resp2d = combinehdu[0].data.copy()/resp
             tofits(resp2dfname,resp2d,hdr = combinehdu[0].header.copy())
@@ -307,7 +278,6 @@ def run_makeflats(fs=None):
             
             #close the combined flat because we don't need it anymore
             combinehdu.close()
-            
             
             pyfits.setval(resp2dfname,'DISPAXIS',value=1)
             
@@ -325,9 +295,10 @@ def run_flatten(fs = None):
     if len(fs)==0:
         print "There are no files to flatten."
         return
+    if not os.path.exists('flts'): os.mkdir('flts')
     #Make sure there are science images or arcs and what grating angles were used
-    scifs, scigas = get_scis(fs)
-    arcfs, arcgas = get_arcs(fs)
+    scifs, scigas = get_ims(fs,'sci')
+    arcfs, arcgas = get_ims(fs,'arc')
 
     ims = append(scifs,arcfs)
     gas = append(scigas, arcgas)
@@ -349,38 +320,33 @@ def run_flatten(fs = None):
         #get the image number
         #by salt naming convention, these should be the last 3 characters before the '.fits'
         imnum = f[-8:-5]
-        outname = typestr+'%0.2fflt%03ic%i.fits'%(ga,imnum,c)
+        outname = 'flts/'+typestr+'%0.2fflt%03i.fits'%(ga,imnum)
         thishdu.writeto(outname)
         thishdu.close()
         
 def run_mosaic(fs=None):
-    # just an existence check; reasonable assumption: no flatsciences ==> no flatarcs
-    if fs is None: fs = glob('sci*flt*.fits') 
+    # If the file list is not given, grab the default files
+    if fs is None: fs = glob('flts/*.fits') 
+    #Abort if there are no files
     if len(fs)==0:
-        print "There are no flat-fielded chip-based files to mosaic."
+        print "There are no images to make a mosaic."
         return
-    # Grab the previous-stage single-file science images & gr-angles 
-    # (not the flat-fielded ones since they are separate chip-based images)
-    (scifs,scigas),(arcfs,arcgas) = get_scis(glob('pysalt/bxgpP*.fits')),get_arcs(glob('pysalt/bxgpP*.fits'))
-    for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
-        for i,f in enumerate(groupfs): 
-            # move all flat-fielded chip-based data into a single multi-fits file for saltmosaic
-            if f in scifs: typestr = 'sci'
-            else: typestr = 'arc'
-            ga,imgnum = groupgas[i],f[-8:-5]
-            singlefitsName = typestr+'%0.2fflt%03i.fits'%(ga,imgnum)
-            preservefits(oldfilename=f,newfilename=singlefitsName,auxfilename='')
-            hdunew = pyfits.open(singlefitsName,mode='update')
-            # replace data in each extension with flat-fielded chip-based data 
-            for c in range(1,7): 
-                hduc = pyfits.open(typestr+'%0.2fflt%03ic%i.fits'%(ga,imgnum,c))
-                datac = hduc[0].data.copy()
-                hduc.close()
-                hdunew[c].data = datac
-            hdunew.flush(output_verify='ignore')
-            hdunew.close()
-            iraf.unlearn(iraf.saltmosaic) # prepare to run saltmosaic
-            iraf.saltmosaic(images=singlefitsName,outimages=typestr+'%0.2fmos%03i.fits'%(ga,imgnum),outpref='',clobber=True,mode='h') 
+    
+    #Get the images to work with
+    scifs, scigas = get_ims(fs,'sci')
+    arcfs, arcgas = get_ims(fs,'arc')
+    ims = append(scifs,arcfs)
+    gas = append(scigas, arcgas)
+    
+    if not os.path.exists('mos'):os.mkdir('mos')
+    for i,f in enumerate(ims): 
+            fname =  f.split('/')[1]
+            typestr = fname[:3]
+            #by our naming convention, these should be the last 3 characters before the '.fits'
+            imnum = fname[-8:-5]
+            outname = 'mos/'+typestr+'%0.2fmos%03i.fits'%(ga,imnum)
+            iraf.unlearn(iraf.saltmosaic) ; iraf.flpr()# prepare to run saltmosaic
+            iraf.saltmosaic(images=f,outimages=outname,outpref='',clobber=True,mode='h') 
 
 def run_combine2d(fs=None):
     #Grab the mosaiced images
