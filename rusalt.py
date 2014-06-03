@@ -67,7 +67,7 @@ def tods9(filename):
     d.set('file '+filename)
     d.set('zoom to fit')
     d.set('zscale')
-    print filename+' has been briefly opened in ds9.'
+    print 'DS9: '+filename+' has been briefly opened.'
     
 def run(dostages='all',stdstar = False,interactive = False, files = None):
     #Make sure the stages parameters makes sense
@@ -391,7 +391,7 @@ def run_identify2d(fs=None):
     if len(fs)==0:
         print "ERROR: No mosaiced arcs for PySALT's (2D) specidentify."
         return
-    (arcfs,arcgas) = get_arcs(fs)
+    (arcfs,arcgas) = get_ims(fs,'arc')
     if not os.path.exists('sol'):os.mkdir('sol')
     for i,f in enumerate(arcfs):
 	    # new way of finding imgnum based on naming convention for possibly stacked images
@@ -427,12 +427,12 @@ def run_identify2d(fs=None):
 					      startext=1,clobber='yes',verbose='yes')
 
 def run_rectify(fs=None):
-    if fs is None: fs = glob('sol/arc*sol*.fits') 
+    if fs is None: fs = glob('sol/arc*sol*.db') 
     if len(fs)==0:
         print "ERROR: No wavelength solutions for rectification."
         return
     # rectify each sci/arc and pop it open briefly in ds9
-    (scifs,scigas),(arcfs,arcgas) = get_scis(glob('*mos*.fits')),get_arcs(glob('*mos*.fits'))
+    (scifs,scigas),(arcfs,arcgas) = get_ims(glob('mos/*mos*.fits'),'sci'),get_ims(glob('mos/*mos*.fits'),'arc')
     if not os.path.exists('rec'):os.mkdir('rec')
     for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
 	    for i,f in enumerate(groupfs): 
@@ -448,13 +448,13 @@ def run_rectify(fs=None):
     # I think this step should just be combined with the identify2d() step, 
     # or at least the arc rectifications to verify good sol -VP
 
-def split_by_chip(fs=None):
+def run_unmosaic(fs=None):
    if fs is None: fs = glob('rec/*rec*.fits') 
    if len(fs)==0:
        print "ERROR: No rectified images to split by chip."
        return
     # Grab the rectified science images (only they need to be split up for bkg+lax)
-    (scifs,scigas) = get_scis(fs)
+    (scifs,scigas) = get_ims(fs,'sci')
     # Pixel begin:end numbers (+/- epsilon included) for chip gaps based on different CCDSUM header key values (binning)
     chipGapPix = {'2 2':((1010,1095),(2085,2160)),'2 4':((1035,1121),(2115,2191)),'4 4':((500,551),(1035,1091))}
     # Split each image into 3 imgs such that the middle img has both chip gaps, and the other 2 imgs don't have chip gaps
@@ -465,9 +465,9 @@ def split_by_chip(fs=None):
         data = hdu[1].data.copy()
         hdr1 = hdu[1].header.copy()
         for c in range(1,4):
-            if c == 1: tofits(f[:-5]+'c1.fits',data[0:c1min],hdr=hdr1) # same rec directory, just adding c# before '.fits'
-            elif c == 2: tofits(f[:-5]+'c2.fits',data[c1min:c2max+1],hdr=hdr1)    
-            elif c == 3: tofits(f[:-5]+'c3.fits',data[c2max+1:],hdr=hdr1)               
+            if c == 1: tofits(f[:-5]+'c1.fits',data[:,0:c1min],hdr=hdr1) # same rec directory, just adding c# before '.fits'
+            elif c == 2: tofits(f[:-5]+'c2.fits',data[:,c1min:c2max+1],hdr=hdr1)    
+            elif c == 3: tofits(f[:-5]+'c3.fits',data[:,c2max+1:],hdr=hdr1)               
     
 
 def run_createbpm(fs=None):
@@ -477,7 +477,7 @@ def run_createbpm(fs=None):
         return
     
     # Get rectified science images and gr-angles (individual chips)
-    (scifs,scigas) = get_scis(fs)
+    (scifs,scigas) = get_ims(fs,'sci')
     if not os.path.exists('bpm'):os.mkdir('bpm')
     for i,f in enumerate(scifs):
         # the outfile name is very similar, just change folder prefix and 3-char stage substring
@@ -494,7 +494,7 @@ def run_background(fs=None):
        return
     
     # Get rectified science images and gr-angles
-    (scifs,scigas) = get_scis(fs)
+    (scifs,scigas) = get_ims(fs,'sci')
     if not os.path.exists('bkg'):os.mkdir('bkg')
     for i,f in enumerate(scifs):
         # Run automated 2D background subtraction on each individual chip image
@@ -519,7 +519,7 @@ def run_lax(fs=None):
         return
     
     # Get background-subtracted chip-based science images and gr-angles.
-    (scifs,scigas) = get_scis(fs)
+    (scifs,scigas) = get_ims(fs,'sci')
     if not os.path.exists('lax'):os.mkdir('lax')
     for i,f in enumerate(scifs):
         outname_img = 'lax/'+f[4:12]+'lax'+f[15:]
@@ -545,7 +545,29 @@ def run_lax(fs=None):
         hdu.close()
         
     
-def remosaic_chips(fs=None):
+def run_remosaic(fs=None): 
+    '''
+    Our algorithm currently involves running apall on the non-2D-bkg-subtracted images
+    so we can just use the non-split_by_chip()-processed rectified images.
+    But also, instead of using the lacosmicx output science images, we want to manually
+    flag all cosmic rays in the rectified image's BPM based on the lacosmicx cosmic ray pixel mask (CPM).
+    So for now (unless we change the algorithm), we just want to mosaic the BPM and CPM images. - VP
+    '''
+    fs = glob('bpm/*bpm*.fits')
+    if len(fs)==0:
+        print "ERROR: No bad pixel masks to remosaic." # without BPM, wouldn't have made CPM anyway, so this check is sufficient
+        return
+    
+    # Loop over the chip-based rectified science images since they have 'BPM' keyword anyway.
+    (scifs,scigas) = get_ims(glob('rec/*rec*c*.fits'),'sci')
+    for i,f in enumerate(scifs):
+        # Create BPM mosaic
+        bpmfile = 'bpm/'+f[4:12]+'bpm'+f[15:] # naming convention is very similar
+        outfile = 'bpm/'+f[4:12]+'bpm'+f[15:]
+        
+        # Create CPM mosaic
+    
+    
     # for each rectified (non-split) image, make a copy
     # use numpy to remosaic three lacosmicx-processed chips according to pixel #
     # replace data in copied rectified image with re-mosaiced chips
