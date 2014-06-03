@@ -178,7 +178,7 @@ def run_pysalt(fs=None):
     return fs
 
 def get_ims(fs,imtype):
-    typekeys ={'sci':'OBJECT','arc':'ARC','flat':'OBJECT'}
+    typekeys ={'sci':'OBJECT','arc':'ARC','flat':'FLAT'}
     ims = []
     grangles = []
     for f in fs:
