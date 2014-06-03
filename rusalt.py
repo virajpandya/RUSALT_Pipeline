@@ -353,34 +353,24 @@ def run_identify2d(fs=None):
     if len(fs)==0:
         print "ERROR: No mosaiced arcs for PySALT's (2D) specidentify."
         return
-    (arcfs,arcgas) = get_arcs(fs)
-    if not os.path.exists('sol'):os.mkdir('sol')
+    arcfs,arcgas = get_ims(fs,'arc')
+    if not os.path.exists('id2'):os.mkdir('id2')
+    
+    lampfiles = {'Th Ar':'ThAr.salt','Xe':'Xe.txt', 'Ne':'NeAr.salt', 'Cu Ar':'CuAr.txt',
+                 'Ar':'Argon_hires.salt', 'Hg Ar':'HgAr.txt' }
     for i,f in enumerate(arcfs):
-	    # new way of finding imgnum based on naming convention for possibly stacked images
-	    ga,imgnum = arcgas[i],f[11:f.index('.fits')]
-	    # find lamp and corresponding linelist
-	    lamp = pyfits.getval(f,'LAMPID')
-	    if lamp == 'Th Ar':
-		    print 'the lamp is '+lamp+' for '+f 
-		    lamplines = lineListPath+'ThAr.salt' # global variable lineListPath defined in beginning
-	    elif lamp == 'Xe':
-		    print 'the lamp is '+lamp+' for '+f
-		    lamplines = lineListPath+'Xe.txt'
-	    elif lamp == 'Ne':
-		    print 'the lamp is '+lamp+' for '+f
-		    lamplines = lineListPath+'NeAr.salt' 
-	    elif lamp == 'Cu Ar':
-		    print 'the lamp is '+lamp+' for '+f
-		    lamplines = lineListPath+'CuAr.txt'
-	    elif lamp == 'Ar':
-		    print 'the lamp is '+lamp+' for '+f
-		    lamplines = lineListPath+'Argon_hires.salt'
-	    elif lamp == 'Hg Ar':
-		    print 'the lamp is '+lamp+' for '+f
-		    lamplines = lineListPath+'HgAr.txt'
-	    else:
-		    print 'Could not find the proper linelist for '+lamp+' lamp.'
-		    return
+        # new way of finding imgnum based on naming convention for possibly stacked images
+        ga,imgnum = arcgas[i],f[11:f.index('.fits')]
+        # find lamp and corresponding linelist
+        lamp = pyfits.getval(f,'LAMPID')
+        print 'the lamp is '+lamp+' for '+f 
+         # linelistpath is a global variable defined in beginning, path to where the line lists are.
+        try{lamplines = lineListPath+lampfiles[lamp]}
+        catch{}
+        
+	    
+		print 'Could not find the proper linelist for '+lamp+' lamp.'
+		return
 	    # run pysalt specidentify
 	    idfile = 'sol/arc%0.2fsol'%(ga)+'.fits' # no need for imgnum complications
 	    iraf.unlearn(iraf.specidentify)
