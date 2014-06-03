@@ -360,8 +360,7 @@ def run_identify2d(fs=None):
     lampfiles = {'Th Ar':'ThAr.salt','Xe':'Xe.txt', 'Ne':'NeAr.salt', 'Cu Ar':'CuAr.txt',
                  'Ar':'Argon_hires.salt', 'Hg Ar':'HgAr.txt' }
     for i,f in enumerate(arcfs):
-        # new way of finding imgnum based on naming convention for possibly stacked images
-        ga,imgnum = arcgas[i],f[11:f.index('.fits')]
+        ga = arcgas[i]
         # find lamp and corresponding linelist
         lamp = pyfits.getval(f,'LAMPID')
         print 'the lamp is '+lamp+' for '+f 
@@ -371,9 +370,11 @@ def run_identify2d(fs=None):
             print('Could not find the proper linelist for '+lamp+' lamp.')
             raise
         
+        #img num should be right before the .fits
+        imgnum = f[-8:-5]
         # run pysalt specidentify
-        idfile = 'sol/arc%0.2fsol'%(ga)+'.fits' # no need for imgnum complications
-        iraf.unlearn(iraf.specidentify)
+        idfile = 'id2/arc%0.2fid2%03i'%(ga,imgnum)+'.fits' 
+        iraf.unlearn(iraf.specidentify); iraf.flpr()
         iraf.specidentify(images=f,linelist=lamplines,outfile=idfile,guesstype='rss',automethod='Matchlines',
         			      function='legendre',order=3,rstep=100,rstart='middlerow',mdiff=5,inter='yes',
         			      startext=1,clobber='yes',verbose='yes')
