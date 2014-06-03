@@ -328,9 +328,7 @@ def run_flatten(fs = None):
     #Make sure there are science images or arcs and what grating angles were used
     scifs, scigas = get_scis(fs)
     arcfs, arcgas = get_arcs(fs)
-    
-##### would be good to do an easy/transparent check that the gr-angles of arcs and scis uniquely match up - VP
-    
+
     ims = append(scifs,arcfs)
     gas = append(scigas, arcgas)
     #For each science and arc image
