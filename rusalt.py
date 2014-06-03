@@ -15,6 +15,7 @@ iraf.saltred()
 iraf.saltspec()
 iraf.twodspec()
 iraf.longslit()
+iraf.imutil()
 
 # System-specific paths for standards, linelists, etc.
 standardsPath = '/usr/local/astro64/iraf/extern/pysalt/data/standards/spectroscopic/'
@@ -468,11 +469,30 @@ def split_by_chip(fs=None):
             elif c == 2: tofits(f[:-5]+'c2.fits',data[c1min:c2max+1],hdr=hdr1)    
             elif c == 3: tofits(f[:-5]+'c3.fits',data[c2max+1:],hdr=hdr1)               
     
+
+def run_createbpm(fs=None):
+    if fs is None: fs = glob('rec/*rec*c*.fits') 
+    if len(fs)==0:
+        print "ERROR: No rectified chip-based images for bad pixel mask creation."
+        return
+    
+    # Get rectified science images and gr-angles (individual chips)
+    (scifs,scigas) = get_scis(fs)
+    if not os.path.exists('bpm'):os.mkdir('bpm')
+    for i,f in enumerate(scifs):
+        # the outfile name is very similar, just change folder prefix and 3-char stage substring
+        outfile = 'bpm/'+f[4:12]+'bpm'+f[15:]
+        iraf.unlearn(iraf.imexpr)
+        iraf.imexpr(expr='a==0',output=outfile,a=f)
+        # for easy access in run_lacosmicx() 
+        pyfits.setval(f,'BPM',value=outfile) # will be propagated down throughout the stages ;)   
+    
 def run_background(fs=None):
    if fs is None: fs = glob('rec/*rec*c*.fits') 
    if len(fs)==0:
        print "ERROR: No rectified chip-based images for 2D-background-subtraction."
        return
+    
     # Get rectified science images and gr-angles
     (scifs,scigas) = get_scis(fs)
     if not os.path.exists('bkg'):os.mkdir('bkg')
@@ -482,6 +502,7 @@ def run_background(fs=None):
         hdu = pyfits.open(f)
         # the outfile name is very similar, just change folder prefix and 3-char stage substring
         outfile = 'bkg/'+f[4:12]+'bkg'+f[15:]
+        iraf.unlearn(iraf.background)
         iraf.background(input=f,output='auxbkg.fits',interactive='no',naverage='-100',function='legendre',
                         order=2,low_reject=1.0,high_reject=1.0,niterate=10,grow=0.0)
         hduaux = pyfits.open('auxbkg.fits')
@@ -497,14 +518,32 @@ def run_lax(fs=None):
         print "ERROR: No background-subtracted files for LaCosmicX."
         return
     
-    #Figure out which files are science files
-    #For each science file
-    #open the file in read only mode.
-    #For each chip
-    #run lacosmicx on a copy of the data
-    #replace the data with cleaned lax data
-    #save the updated file
-    #cleanup
+    # Get background-subtracted chip-based science images and gr-angles.
+    (scifs,scigas) = get_scis(fs)
+    if not os.path.exists('lax'):os.mkdir('lax')
+    for i,f in enumerate(scifs):
+        outname_img = 'lax/'+f[4:12]+'lax'+f[15:]
+        outname_msk = 'lax/'+f[4:12]+'cpm'+f[15:] # cosmic (ray) pixel mask
+        hdu = pyfits.open(f)
+        datain = hdu[0].data.copy()
+        ##### make sure gain == 1 (since mult='yes' in saltgain), but what about readnoise?
+        hdr = hdu[0].header
+        saltgain = hdr.get('GAIN',1.0)
+        namebpm = hdr['BPM']
+        # Get mode of image counts as a proxy for pre-sky-subtracted-level
+        mode = float(imutil.imstat(images=f,fields='mode',format='no',Stdout=1)[0])
+        # Get BPM data array
+        hdubpm = pyfits.open(namebpm)
+        databpm = hdubpm[0].data.copy()
+        hdubpm.close()
+        # Run lacosmicx
+		datalax = lacosmicx.run(inmat=datain,inmask=databpm,outmaskfile=outname_msk,
+		                        sigclip=6.0,objlim=3.0,sigfrac=0.1,gain=saltgain,pssl=mode,robust=True)
+		# Update and save file
+		hdu[0].data = datalax
+		hdu.writeto(outname_img)
+		hdu.close()
+        
     
 def remosaic_chips(fs=None):
     # for each rectified (non-split) image, make a copy
