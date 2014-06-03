@@ -483,6 +483,12 @@ def split_by_chip(fs=None):
     # split by chip such that middle chip has both chip gaps (+/- delta)
     # define global dictionary for chip gap pixel and image begin:end pixel numbers based on CCDSUM (2x2,2x4,4x4)
     # save as individual images: sci##.##rec###c%.fits for %\in{1,2,3}
+    
+    # Pixel begin:end numbers for images, chip gaps, and telluric regions based on CCDSUM binning
+    chipGapPix22 = ((1010,1095),(2085,2160))
+    chipGapPix24 = ((1035,1121),(2115,2191))
+    chipGapPix44 = ((500,551),(1035,1091))
+
     return
 
 def run_background(fs=None):
