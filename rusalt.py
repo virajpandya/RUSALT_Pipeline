@@ -537,12 +537,12 @@ def run_lax(fs=None):
         databpm = hdubpm[0].data.copy()
         hdubpm.close()
         # Run lacosmicx
-		datalax = lacosmicx.run(inmat=datain,inmask=databpm,outmaskfile=outname_msk,
+        datalax = lacosmicx.run(inmat=datain,inmask=databpm,outmaskfile=outname_msk,
 		                        sigclip=6.0,objlim=3.0,sigfrac=0.1,gain=saltgain,pssl=mode,robust=True)
-		# Update and save file
-		hdu[0].data = datalax
-		hdu.writeto(outname_img)
-		hdu.close()
+        # Update and save file
+        hdu[0].data = datalax
+        hdu.writeto(outname_img)
+        hdu.close()
         
     
 def remosaic_chips(fs=None):
