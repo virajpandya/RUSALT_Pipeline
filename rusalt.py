@@ -520,12 +520,18 @@ def run_remosaic(fs=None):
         print "ERROR: No bad pixel masks to remosaic." # without BPM, wouldn't have made CPM anyway, so this check is sufficient
         return
     
-    # Loop over the chip-based rectified science images since they have 'BPM' keyword anyway.
-    (scifs,scigas) = get_ims(glob('rec/*rec*c*.fits'),'sci')
+    # Loop over the mosaiced rectified science images
+    (scifs,scigas) = get_ims(glob('rec/*rec*.fits'),'sci')
     for i,f in enumerate(scifs):
+        ga,imgnum = scigas[i],f[11:f.index('.fits')]
+        outfile_bpm = 'bpm/'+f[4:12]+'bpm'+imgnum+'.fits' # gets rid of the 'c#' before '.fits'
+        outfile_cpm = 'lax/'+f[4:12]+'cpm'+imgnum+'.fits'
         # Create BPM mosaic
-        bpmfile = 'bpm/'+f[4:12]+'bpm'+f[15:] # naming convention is very similar
-        outfile = 'bpm/'+f[4:12]+'bpm'+f[15:]
+        chips = []
+        for c in range(1,4):
+            bpmfile = 'bpm/'+f[4:12]+'bpm'+imgnum+'c%i'%(c)+'.fits' # naming convention is very similar
+            
+            
         
         # Create CPM mosaic
     
