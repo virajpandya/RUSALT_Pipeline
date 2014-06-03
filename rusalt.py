@@ -352,10 +352,11 @@ def run_combine2d(fs=None):
     #Grab the mosaiced images
     if fs is None: fs = glob('*mos*.fits') 
     if len(fs)==0:
-        print "There are no mosaiced images to combine."
+        print "There are no images to combine."
         return
     #Find the science files and arcs (and their grating angles)
-    (scifs,scigas),(arcfs,arcgas) = get_scis(fs),get_arcs(fs)
+    scifs,scigas = get_ims(fs,'sci')
+    arcfs,arcgas = get_arcs(fs,'arc')
     for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
         for i,f in enumerate(groupgas): 
             if len(groupgas) != len(unique(groupgas)): # this means there are multiple files for a given gr-angle
