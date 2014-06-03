@@ -42,31 +42,31 @@ def tofits(filename, data, hdr=None,clobber=False):
     
 # preserves AND modifies old FITS headers (unlike IRAF tasks) and maintains PySALT file structure
 def preservefits(oldfilename,newfilename,auxfilename,keys=[],newheader=False):
-	shutil.copyfile(oldfilename,newfilename)
-	if auxfilename != '':
-		hduaux = pyfits.open(auxfilename)
-		dataaux = hduaux[0].data.copy() # data from auxiliary output by IRAF task
-		hdraux = hduaux[0].header.copy() # header from aux output by IRAF task, good for apall/1d-identify, etc.
-		hduaux.close()
-		hdunew = pyfits.open(newfilename,mode='update')
-		hdunew[1].data = dataaux # simply replace the old data
-		if newheader == True:
-			hdraux.update('EXTNAME','SCI') # IRAF doesn't maintain these next two keywords
-			hdraux.update('EXTVER',1)
-			hdunew[1].header = hdraux
-		for k in keys:
-			(hdunew[0].header)[k] = hdraux[k] # e.g., avg EXPTIME
-			(hdunew[1].header)[k] = hdraux[k]
-		hdunew.flush(output_verify='ignore')
-		hdunew.close()
-		os.remove(auxfilename)
+    shutil.copyfile(oldfilename,newfilename)
+    if auxfilename != '':
+	    hduaux = pyfits.open(auxfilename)
+	    dataaux = hduaux[0].data.copy() # data from auxiliary output by IRAF task
+	    hdraux = hduaux[0].header.copy() # header from aux output by IRAF task, good for apall/1d-identify, etc.
+	    hduaux.close()
+	    hdunew = pyfits.open(newfilename,mode='update')
+	    hdunew[1].data = dataaux # simply replace the old data
+	    if newheader == True:
+		    hdraux.update('EXTNAME','SCI') # IRAF doesn't maintain these next two keywords
+		    hdraux.update('EXTVER',1)
+		    hdunew[1].header = hdraux
+	    for k in keys:
+		    (hdunew[0].header)[k] = hdraux[k] # e.g., avg EXPTIME
+		    (hdunew[1].header)[k] = hdraux[k]
+	    hdunew.flush(output_verify='ignore')
+	    hdunew.close()
+	    os.remove(auxfilename)
 		
 def tods9(filename):
-	d = ds9.ds9(start=True)
-	d.set('file '+filename)
-	d.set('zoom to fit')
-	d.set('zscale')
-	print filename+' has been briefly opened in ds9.'
+    d = ds9.ds9(start=True)
+    d.set('file '+filename)
+    d.set('zoom to fit')
+    d.set('zscale')
+    print filename+' has been briefly opened in ds9.'
     
 def run(dostages='all',stdstar = False,interactive = False, files = None):
     #Make sure the stages parameters makes sense
@@ -356,33 +356,33 @@ def run_flatten(fs = None):
         thishdu.close()
         
 def run_mosaic(fs=None):
-	# just an existence check; reasonable assumption: no flatsciences ==> no flatarcs
-	if fs is None: fs = glob('sci*flt*.fits') 
+    # just an existence check; reasonable assumption: no flatsciences ==> no flatarcs
+    if fs is None: fs = glob('sci*flt*.fits') 
     if len(fs)==0:
         print "There are no flat-fielded chip-based files to mosaic."
         return
     # Grab the previous-stage single-file science images & gr-angles 
     # (not the flat-fielded ones since they are separate chip-based images)
     (scifs,scigas),(arcfs,arcgas) = get_scis(glob('pysalt/bxgpP*.fits')),get_arcs(glob('pysalt/bxgpP*.fits'))
-	for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
-		for i,f in enumerate(groupfs): 
-			# move all flat-fielded chip-based data into a single multi-fits file for saltmosaic
-			if f in scifs: typestr = 'sci'
-			else: typestr = 'arc'
-			ga,imgnum = groupgas[i],f[-8:-5]
-			singlefitsName = typestr+'%0.2fflt%03i.fits'%(ga,imgnum)
-			preservefits(oldfilename=f,newfilename=singlefitsName,auxfilename='')
-			hdunew = pyfits.open(singlefitsName,mode='update')
-			# replace data in each extension with flat-fielded chip-based data 
-			for c in range(1,7): 
-				hduc = pyfits.open(typestr+'%0.2fflt%03ic%i.fits'%(ga,imgnum,c))
-				datac = hduc[0].data.copy()
-				hduc.close()
-				hdunew[c].data = datac
-			hdunew.flush(output_verify='ignore')
-			hdunew.close()
-			iraf.unlearn(iraf.saltmosaic) # prepare to run saltmosaic
-			iraf.saltmosaic(images=singlefitsName,outimages=typestr+'%0.2fmos%03i.fits'%(ga,imgnum),outpref='',clobber=True,mode='h') 
+    for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
+        for i,f in enumerate(groupfs): 
+            # move all flat-fielded chip-based data into a single multi-fits file for saltmosaic
+            if f in scifs: typestr = 'sci'
+            else: typestr = 'arc'
+            ga,imgnum = groupgas[i],f[-8:-5]
+            singlefitsName = typestr+'%0.2fflt%03i.fits'%(ga,imgnum)
+            preservefits(oldfilename=f,newfilename=singlefitsName,auxfilename='')
+            hdunew = pyfits.open(singlefitsName,mode='update')
+            # replace data in each extension with flat-fielded chip-based data 
+            for c in range(1,7): 
+                hduc = pyfits.open(typestr+'%0.2fflt%03ic%i.fits'%(ga,imgnum,c))
+                datac = hduc[0].data.copy()
+                hduc.close()
+                hdunew[c].data = datac
+            hdunew.flush(output_verify='ignore')
+            hdunew.close()
+            iraf.unlearn(iraf.saltmosaic) # prepare to run saltmosaic
+            iraf.saltmosaic(images=singlefitsName,outimages=typestr+'%0.2fmos%03i.fits'%(ga,imgnum),outpref='',clobber=True,mode='h') 
 
 def run_combine2d(fs=None):
     #Grab the mosaiced images
@@ -392,26 +392,26 @@ def run_combine2d(fs=None):
         return
     #Find the science files and arcs (and their grating angles)
     (scifs,scigas),(arcfs,arcgas) = get_scis(fs),get_arcs(fs)
-  	for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
-		for i,f in enumerate(groupgas): 
-    		if len(groupgas) != len(unique(groupgas)): # this means there are multiple files for a given gr-angle
-				repgas = set([a for a in groupgas if groupgas.count(a)>1]) # repeated gr-angles
-				if f in arcfs: 
-					print "ERROR: multiple arcs found for gr-angles",repgas
-					return # user should inspect+delete extra arcs then re-run
-				else:
-					for ga in repgas:
-						suffix = ''
-						for j in glob('sci%0.2fmos*.fits'%(ga)):
-							suffix += j[-8:-5] # careful in the future: longer imgnum sequences now possible
-						iraf.unlearn(iraf.imcombine); iraf.flpr()
-						iraf.imcombine(input = 'sci%0.2fmos*.fits'%(ga)+'[1]',output='auxstk.fits',combine='sum',
-				               	 	   reject='crreject',lsigma = 3.0, hsigma = 3.0,
-				                       weight='exposure',expname='EXPTIME') 
-				        # preserve file structure and summed EXPTIME keyword of stacked data
-				        outname = 'sci%0.2fstk'%(ga)+suffix+'.fits'
-				        preservefits(oldfilename=glob('sci%0.2fmos*.fits'%(ga))[0],newfilename=outname,
-				        		     keys=['EXPTIME'],auxfilename='auxstk.fits')
+    for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
+        for i,f in enumerate(groupgas): 
+            if len(groupgas) != len(unique(groupgas)): # this means there are multiple files for a given gr-angle
+                repgas = set([a for a in groupgas if groupgas.count(a)>1]) # repeated gr-angles
+                if f in arcfs: 
+                    print "ERROR: multiple arcs found for gr-angles",repgas
+                    return # user should inspect+delete extra arcs then re-run
+                else:
+                    for ga in repgas:
+	                    suffix = ''
+	                    for j in glob('sci%0.2fmos*.fits'%(ga)):
+		                    suffix += j[-8:-5] # careful in the future: longer imgnum sequences now possible
+	                    iraf.unlearn(iraf.imcombine); iraf.flpr()
+	                    iraf.imcombine(input = 'sci%0.2fmos*.fits'%(ga)+'[1]',output='auxstk.fits',combine='sum',
+                               	 	   reject='crreject',lsigma = 3.0, hsigma = 3.0,
+                                       weight='exposure',expname='EXPTIME') 
+                        # preserve file structure and summed EXPTIME keyword of stacked data
+                        outname = 'sci%0.2fstk'%(ga)+suffix+'.fits'
+                        preservefits(oldfilename=glob('sci%0.2fmos*.fits'%(ga))[0],newfilename=outname,
+                        		     keys=['EXPTIME'],auxfilename='auxstk.fits')
 				        		     
 ##### Need to find an efficient way to combine important header keys of individual images (e.g., date/time-obs in ext-0-header)
 ##### I think imcombine has an option for this that we could use for the ext-1-header
@@ -427,37 +427,37 @@ def run_identify2d(fs=None):
         return
     (arcfs,arcgas) = get_arcs(fs)
     for i,f in enumerate(arcfs):
-    	# new way of finding imgnum based on naming convention for possibly stacked images
-    	ga,imgnum = arcgas[i],f[11:f.index('.fits')]
-    	# find lamp and corresponding linelist
-    	lamp = pyfits.getval(f,'LAMPID')
-    	if lamp == 'Th Ar':
-			print 'the lamp is '+lamp+' for '+f 
-			lamplines = lineListPath+'ThAr.salt' # global variable lineListPath defined in beginning
-		elif lamp == 'Xe':
-			print 'the lamp is '+lamp+' for '+f
-			lamplines = lineListPath+'Xe.txt'
-		elif lamp == 'Ne':
-			print 'the lamp is '+lamp+' for '+f
-			lamplines = lineListPath+'NeAr.salt' 
-		elif lamp == 'Cu Ar':
-			print 'the lamp is '+lamp+' for '+f
-			lamplines = lineListPath+'CuAr.txt'
-		elif lamp == 'Ar':
-			print 'the lamp is '+lamp+' for '+f
-			lamplines = lineListPath+'Argon_hires.salt'
-		elif lamp == 'Hg Ar':
-			print 'the lamp is '+lamp+' for '+f
-			lamplines = lineListPath+'HgAr.txt'
-		else:
-			print 'Could not find the proper linelist for '+lamp+' lamp.'
-			return
-		# run pysalt specidentify
-		idfile = 'arc%0.2fsol'%(ga)+'.fits' # no need for imgnum complications
-		iraf.unlearn(iraf.specidentify)
-		iraf.specidentify(images=f,linelist=lamplines,outfile=idfile,guesstype='rss',automethod='Matchlines',
-						  function='legendre',order=3,rstep=100,rstart='middlerow',mdiff=5,inter='yes',
-						  startext=1,clobber='yes',verbose='yes')
+	    # new way of finding imgnum based on naming convention for possibly stacked images
+	    ga,imgnum = arcgas[i],f[11:f.index('.fits')]
+	    # find lamp and corresponding linelist
+	    lamp = pyfits.getval(f,'LAMPID')
+	    if lamp == 'Th Ar':
+		    print 'the lamp is '+lamp+' for '+f 
+		    lamplines = lineListPath+'ThAr.salt' # global variable lineListPath defined in beginning
+	    elif lamp == 'Xe':
+		    print 'the lamp is '+lamp+' for '+f
+		    lamplines = lineListPath+'Xe.txt'
+	    elif lamp == 'Ne':
+		    print 'the lamp is '+lamp+' for '+f
+		    lamplines = lineListPath+'NeAr.salt' 
+	    elif lamp == 'Cu Ar':
+		    print 'the lamp is '+lamp+' for '+f
+		    lamplines = lineListPath+'CuAr.txt'
+	    elif lamp == 'Ar':
+		    print 'the lamp is '+lamp+' for '+f
+		    lamplines = lineListPath+'Argon_hires.salt'
+	    elif lamp == 'Hg Ar':
+		    print 'the lamp is '+lamp+' for '+f
+		    lamplines = lineListPath+'HgAr.txt'
+	    else:
+		    print 'Could not find the proper linelist for '+lamp+' lamp.'
+		    return
+	    # run pysalt specidentify
+	    idfile = 'arc%0.2fsol'%(ga)+'.fits' # no need for imgnum complications
+	    iraf.unlearn(iraf.specidentify)
+	    iraf.specidentify(images=f,linelist=lamplines,outfile=idfile,guesstype='rss',automethod='Matchlines',
+					      function='legendre',order=3,rstep=100,rstart='middlerow',mdiff=5,inter='yes',
+					      startext=1,clobber='yes',verbose='yes')
 
 def run_rectify(fs=None):
     if fs is None: fs = glob('arc*sol*.fits') 
@@ -466,26 +466,26 @@ def run_rectify(fs=None):
         return
     # rectify each sci/arc and pop it open briefly in ds9
     (scifs,scigas),(arcfs,arcgas) = get_scis(glob('*mos*.fits')),get_arcs(glob('*mos*.fits'))
-	for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
-		for i,f in enumerate(groupfs): 
-			if f in scifs: typestr = 'sci'
-			else: typestr = 'arc'
-			ga,imgnum = groupgas[i],f[11:f.index('.fits')]
-			outfile = typestr+'%0.2frec'%(ga)+imgnum+'.fits'
-			iraf.unlearn(iraf.specrectify)
-			iraf.specrectify(images=f,outimages=outfile,solfile='arc%0.2fsol'%(ga)+'.fits',outpref='',caltype='line',
-							 function='legendre',order=3,inttype='interp',clobber='yes',verbose='yes') 	   		  
-    		tods9(outfile)
+    for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
+	    for i,f in enumerate(groupfs): 
+		    if f in scifs: typestr = 'sci'
+		    else: typestr = 'arc'
+		    ga,imgnum = groupgas[i],f[11:f.index('.fits')]
+		    outfile = typestr+'%0.2frec'%(ga)+imgnum+'.fits'
+		    iraf.unlearn(iraf.specrectify)
+		    iraf.specrectify(images=f,outimages=outfile,solfile='arc%0.2fsol'%(ga)+'.fits',outpref='',caltype='line',
+						     function='legendre',order=3,inttype='interp',clobber='yes',verbose='yes') 	   		  
+		    tods9(outfile)
 
-	# I think this step should just be combined with the identify2d() step, 
-	# or at least the arc rectifications to verify good sol -VP
+    # I think this step should just be combined with the identify2d() step, 
+    # or at least the arc rectifications to verify good sol -VP
 
 def split_by_chip(fs=None):
-	# for each rectified science image
-	# split by chip such that middle chip has both chip gaps (+/- delta)
-	# define global dictionary for chip gap pixel and image begin:end pixel numbers based on CCDSUM (2x2,2x4,4x4)
-	# save as individual images: sci##.##rec###c%.fits for %\in{1,2,3}
-	return
+    # for each rectified science image
+    # split by chip such that middle chip has both chip gaps (+/- delta)
+    # define global dictionary for chip gap pixel and image begin:end pixel numbers based on CCDSUM (2x2,2x4,4x4)
+    # save as individual images: sci##.##rec###c%.fits for %\in{1,2,3}
+    return
 
 def run_background(fs=None):
     #For each rectified science image
@@ -508,9 +508,9 @@ def run_lax(fs=None):
     #cleanup
     
 def remosaic_chips(fs=None):
-	# for each rectified (non-split) image, make a copy
-	# use numpy to remosaic three lacosmicx-processed chips according to pixel #
-	# replace data in copied rectified image with re-mosaiced chips
+    # for each rectified (non-split) image, make a copy
+    # use numpy to remosaic three lacosmicx-processed chips according to pixel #
+    # replace data in copied rectified image with re-mosaiced chips
     return
 
 def run_extract(fs=None):
