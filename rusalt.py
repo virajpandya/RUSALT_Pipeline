@@ -110,8 +110,6 @@ def run(dostages='all',stdstar = False,interactive = False, files = None):
     
     if 'lax' in stages: run_lax()
     
-    if 'combine2d' in stages: run_combine2d()
-    
     if 'extract' in stages: run_extract()
     
     if 'identify1d' in stages: run_identify1d()
@@ -348,42 +346,6 @@ def run_mosaic(fs=None):
             outname = 'mos/'+typestr+'%0.2fmos%03i.fits'%(ga,imnum)
             iraf.unlearn(iraf.saltmosaic) ; iraf.flpr()# prepare to run saltmosaic
             iraf.saltmosaic(images=f,outimages=outname,outpref='',clobber=True,mode='h') 
-
-def run_combine2d(fs=None):
-    #Grab the mosaiced images
-    if fs is None: fs = glob('*mos*.fits') 
-    if len(fs)==0:
-        print "There are no mosaiced images to combine."
-        return
-    #Find the science files and arcs (and their grating angles)
-    (scifs,scigas),(arcfs,arcgas) = get_scis(fs),get_arcs(fs)
-    for groupfs,groupgas in ((scifs,scigas),(arcfs,arcgas)): # do same thing for scis and arcs
-        for i,f in enumerate(groupgas): 
-            if len(groupgas) != len(unique(groupgas)): # this means there are multiple files for a given gr-angle
-                repgas = set([a for a in groupgas if groupgas.count(a)>1]) # repeated gr-angles
-                if f in arcfs: 
-                    print "ERROR: multiple arcs found for gr-angles",repgas
-                    return # user should inspect+delete extra arcs then re-run
-                else:
-                    for ga in repgas:
-	                    suffix = ''
-	                    for j in glob('sci%0.2fmos*.fits'%(ga)):
-		                    suffix += j[-8:-5] # careful in the future: longer imgnum sequences now possible
-	                    iraf.unlearn(iraf.imcombine); iraf.flpr()
-	                    iraf.imcombine(input = 'sci%0.2fmos*.fits'%(ga)+'[1]',output='auxstk.fits',combine='sum',
-                               	 	   reject='crreject',lsigma = 3.0, hsigma = 3.0,
-                                       weight='exposure',expname='EXPTIME') 
-                        # preserve file structure and summed EXPTIME keyword of stacked data
-                        outname = 'sci%0.2fstk'%(ga)+suffix+'.fits'
-                        preservefits(oldfilename=glob('sci%0.2fmos*.fits'%(ga))[0],newfilename=outname,
-                        		     keys=['EXPTIME'],auxfilename='auxstk.fits')
-				        		     
-##### Need to find an efficient way to combine important header keys of individual images (e.g., date/time-obs in ext-0-header)
-##### I think imcombine has an option for this that we could use for the ext-1-header
-##### we could maybe just replace the old ext-1-header with the imcombine header
-##### and use the keys arg in preservefits to change our most important keys in the 0-ext-header
-##### Also, make sure combine='sum' & weight='exposure' ==> exptime_total = exptime1+exptime2 (sum, not average) -VP
-	# combine the images using imcombine, sum, crreject, check to make sure the exptime keyword is updated - CM
 
 
 def run_identify2d(fs=None):
