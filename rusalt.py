@@ -131,7 +131,7 @@ def run_pysalt(fs=None):
     #Run the pysalt pipeline on the raw data.
     if fs is None: fs = glob('P*.fits')
     if len(fs)==0:
-        print "There are no files to run the PySALT pipeline on."
+        print "ERROR: No raw files to run PySALT pre-processing."
         return
     
     #Copy the raw files into a raw directory
@@ -194,7 +194,7 @@ def run_makeflats(fs=None):
     if fs is None:  
         fs = glob('pysalt/bxgp*.fits')
     if len(fs)==0:
-        print "There are no files to run flat combine."
+        print "ERROR: No flat-fields to combine and normalize."
         #Maybe we need to change folders to fail gracefully, but I don't have this here for now.
         return
     #make a flats directory
@@ -293,7 +293,7 @@ def run_makeflats(fs=None):
 def run_flatten(fs = None):
     if fs is None: fs = glob('pysalt/bxgpP*.fits')
     if len(fs)==0:
-        print "There are no files to flatten."
+        print "ERROR: No images to flat-field."
         return
     if not os.path.exists('flts'): os.mkdir('flts')
     #Make sure there are science images or arcs and what grating angles were used
@@ -329,7 +329,7 @@ def run_mosaic(fs=None):
     if fs is None: fs = glob('flts/*.fits') 
     #Abort if there are no files
     if len(fs)==0:
-        print "There are no images to make a mosaic."
+        print "ERROR: No flat-fielded images to mosaic."
         return
     
     #Get the images to work with
@@ -388,7 +388,7 @@ def run_combine2d(fs=None):
 def run_identify2d(fs=None):
     if fs is None: fs = glob('mos/arc*mos*.fits') 
     if len(fs)==0:
-        print "There are no mosaiced arc images to identify lines on."
+        print "ERROR: No mosaiced arcs for PySALT's (2D) specidentify."
         return
     (arcfs,arcgas) = get_arcs(fs)
     if not os.path.exists('sol'):os.mkdir('sol')
@@ -428,7 +428,7 @@ def run_identify2d(fs=None):
 def run_rectify(fs=None):
     if fs is None: fs = glob('sol/arc*sol*.fits') 
     if len(fs)==0:
-        print "There are no wavelength solutions."
+        print "ERROR: No wavelength solutions for rectification."
         return
     # rectify each sci/arc and pop it open briefly in ds9
     (scifs,scigas),(arcfs,arcgas) = get_scis(glob('*mos*.fits')),get_arcs(glob('*mos*.fits'))
@@ -450,7 +450,7 @@ def run_rectify(fs=None):
 def split_by_chip(fs=None):
    if fs is None: fs = glob('rec/*rec*.fits') 
    if len(fs)==0:
-       print "There are no rectified images to split into chips."
+       print "ERROR: No rectified images to split by chip."
        return
     # Grab the rectified science images (only they need to be split up for bkg+lax)
     (scifs,scigas) = get_scis(fs)
@@ -471,7 +471,7 @@ def split_by_chip(fs=None):
 def run_background(fs=None):
    if fs is None: fs = glob('rec/*rec*c*.fits') 
    if len(fs)==0:
-       print "There are no rectified individual-chip science images."
+       print "ERROR: No rectified chip-based images for 2D-background-subtraction."
        return
     # Get rectified science images and gr-angles
     (scifs,scigas) = get_scis(fs)
@@ -492,10 +492,11 @@ def run_background(fs=None):
         ###### modify/shorten preservefits() to do the above instead if possible, or use data_ext keyword, saves lines
     
 def run_lax(fs=None):
-    fs = glob('bxgp*.fits')
+    fs = glob('bkg/*bkg*.fits')
     if len(fs)==0:
-        print "There are no files to run LaCosmicX on."
+        print "ERROR: No background-subtracted files for LaCosmicX."
         return
+    
     #Figure out which files are science files
     #For each science file
     #open the file in read only mode.
