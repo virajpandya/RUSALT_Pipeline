@@ -416,7 +416,7 @@ def run_unmosaic(fs=None):
     is different ('CCDSUM' keyword), so the dict chipGapPix below allows one to access the pixel numbers based on 'CCDSUM'.
     
     We're splitting by the 3 chips now instead of the 6 'amps' as in the pre-saltmosaic multi-FITS extension files before for two 
-    reasons. First, where the chip gaps begin and end is visible in the 2D spectra (counts == 0), but not for the amps since
+    reasons. First, where the chip gaps begin and end is visible in the 2D spectra (counts == 0), but not for the amps since they are just
     based on the pre-saltmosaic images, e.g., the second amp begins directly after the first amp. More importantly, the rectification
     probably smeared out where one amp ends and the next begins (just look at how it curves the chip gaps).
     '''
