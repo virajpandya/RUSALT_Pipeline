@@ -22,6 +22,14 @@ iraf.imutil()
 standardsPath = '/usr/local/astro64/iraf/extern/pysalt/data/standards/spectroscopic/'
 lineListPath = '/usr/local/astro64/iraf/extern/pysalt/data/linelists/'
 
+'''
+There are two chip gaps, each spanning a range of columns (pixels). To avoid using data near the chip gap edges (primarily
+due to skylines and the fact that we have data covering the chip gaps from overlapping spectra), we take the effective edges of
+the chip gaps to be +/- ~20px beyond their definite edges. The begin:end pixel numbers of each chip gap will change if the binning
+is different ('CCDSUM' header keyword), so the dict chipGapPix below allows one to access the pixel numbers based on 'CCDSUM'.
+'''
+chipGapPix = {'2 2':((1010,1095),(2085,2160)),'2 4':((1035,1121),(2115,2191)),'4 4':((500,551),(1035,1091))}
+
 #Define the stages: Pysalt, LAcosmicx, Flatcombine, flatten, 'mosaic', 2D Identify, Rectify, Extract (Sci and Arcs), 1D Identify, 
 #if standard, calculate flux calibration, Flux calibrate, if standard calculate telluric, telluric correction
 allstages = ['pysalt','makeflats','flatten','mosaic','combine2d','identify2d', 'rectify', 'background','lax','extract','identify1d','dispcor1d'
@@ -410,20 +418,15 @@ def run_unmosaic(fs=None):
     # Grab the rectified science images (only they need to be split up for bkg+lax)
     scifs,scigas = get_ims(fs,'sci')
     '''
-    There are two chip gaps, each spanning a range of columns (pixels). To avoid using data near the chip gap edges (primarily
-    due to skylines and the fact that we have data covering the chip gaps from overlapping spectra), we take the edges of the chip
-    gaps to be +/- ~20px beyond their definite edges. The begin:end pixel numbers of each chip gap will change if the binning
-    is different ('CCDSUM' keyword), so the dict chipGapPix below allows one to access the pixel numbers based on 'CCDSUM'.
-    
     We're splitting by the 3 chips now instead of the 6 'amps' as in the pre-saltmosaic multi-FITS extension files before for two 
     reasons. First, where the chip gaps begin and end is visible in the 2D spectra (counts == 0), but not for the amps since they are just
     based on the pre-saltmosaic images, e.g., the second amp begins directly after the first amp. More importantly, the rectification
     probably smeared out where one amp ends and the next begins (just look at how it curves the chip gaps).
     '''
-    chipGapPix = {'2 2':((1010,1095),(2085,2160)),'2 4':((1035,1121),(2115,2191)),'4 4':((500,551),(1035,1091))}
     # Split each image into 3 imgs such that the middle img has both chip gaps, and the other 2 imgs don't have chip gaps
     for i,f in enumerate(scifs):
         ga,imgnum = scigas[i],f[11:f.index('.fits')]
+        # Global variable chipGapPix returns the begin:end pixel numbers for the 2 chip gaps (depends on binning, i.e., CCDSUM).
         (c1min,c1max),(c2min,c2max) = chipGapPix[pyfits.getval(f,'CCDSUM')][0],chipGapPix[pyfits.getval(f,'CCDSUM')][1]
         hdu = pyfits.open(f)
         data = hdu[1].data.copy()
@@ -601,8 +604,8 @@ def run_extract(fs=None):
         ##### IMPORTANT: make sure relevant keys in 0- or 1-ext-header to prevent pyfits crashes: GAIN (1?), RDNOISE?, DISPAXIS -VP
         ##### IMPORTANT: check if you can change 'line' inside of apall; that is important for non-continuum/extended/faint objects -VP
         #####            this is also where and why ds9 for extract() helps, just nice to see 2D. lots to remember/write otherwise.
-        #####            plus, apall window is popping up anyway, unlike in rectify()
-        ##### IMPORANT:  make sure lsigma and usigma thresholds are enough to reject the cosmic ray pixels (value=1000000) from sum
+        #####            plus, apall window is popping up anyway, unlike in rectify(), so clicks are inevitable
+        ##### IMPORTANT:  make sure lsigma and usigma thresholds are enough to reject the cosmic ray pixels (value=1000000) from sum
         saltgain = pyfits.getval(f,'GAIN') 
         iraf.unlearn(iraf.apall)
         iraf.apall(input=f+'[1]',output='auxext.fits',interactive='yes',review='no',line='INDEF',nsum=-1000,lower=-3.5,upper=3.5,
@@ -694,11 +697,14 @@ def run_stdtelluric():
 def run_telluric():
     return 
     
+def run_sigmaclip():
+    return
+    
 def run_fluxscale()
     return
 
 def run_speccombine():
-    return 
+    return
 
 
 if __name__ == '__main__':
