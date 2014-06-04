@@ -15,6 +15,7 @@ iraf.saltred()
 iraf.saltspec()
 iraf.twodspec()
 iraf.longslit()
+iraf.apextract()
 iraf.imutil()
 
 # System-specific paths for standards, linelists, etc.
@@ -382,7 +383,7 @@ def run_identify2d(fs=None):
 def run_rectify(fs=None):
     if fs is None: fs = glob('id2/arc*id2*.db') 
     if len(fs)==0:
-        print "No wavelength solutions for rectification."
+        print "ERROR: No wavelength solutions for rectification."
         return
     # rectify each sci/arc and pop it open briefly in ds9
     scifs,scigas = get_ims(glob('mos/*mos*.fits'),'sci')
@@ -407,8 +408,18 @@ def run_unmosaic(fs=None):
         print "ERROR: No rectified images to split by chip."
         return
     # Grab the rectified science images (only they need to be split up for bkg+lax)
-    (scifs,scigas) = get_ims(fs,'sci')
-    # Pixel begin:end numbers (+/- epsilon included) for chip gaps based on different CCDSUM header key values (binning)
+    scifs,scigas = get_ims(fs,'sci')
+    '''
+    There are two chip gaps, each spanning a range of columns (pixels). To avoid using data near the chip gap edges (primarily
+    due to skylines and the fact that we have data covering the chip gaps from overlapping spectra), we take the edges of the chip
+    gaps to be +/- ~20px beyond their definite edges. The begin:end pixel numbers of each chip gap will change if the binning
+    is different ('CCDSUM' keyword), so the dict chipGapPix below allows one to access the pixel numbers based on 'CCDSUM'.
+    
+    We're splitting by the 3 chips now instead of the 6 'amps' as in the pre-saltmosaic multi-FITS extension files before for two 
+    reasons. First, where the chip gaps begin and end is visible in the 2D spectra (counts == 0), but not for the amps since
+    based on the pre-saltmosaic images, e.g., the second amp begins directly after the first amp. More importantly, the rectification
+    probably smeared out where one amp ends and the next begins (just look at how it curves the chip gaps).
+    '''
     chipGapPix = {'2 2':((1010,1095),(2085,2160)),'2 4':((1035,1121),(2115,2191)),'4 4':((500,551),(1035,1091))}
     # Split each image into 3 imgs such that the middle img has both chip gaps, and the other 2 imgs don't have chip gaps
     for i,f in enumerate(scifs):
@@ -428,9 +439,9 @@ def run_createbpm(fs=None):
     if len(fs)==0:
         print "ERROR: No rectified chip-based images for bad pixel mask creation."
         return
-    
+    ''' The BPM is used for lacosmicx '''
     # Get rectified science images and gr-angles (individual chips)
-    (scifs,scigas) = get_ims(fs,'sci')
+    scifs,scigas = get_ims(fs,'sci')
     if not os.path.exists('bpm'):os.mkdir('bpm')
     for i,f in enumerate(scifs):
         # the outfile name is very similar, just change folder prefix and 3-char stage substring
@@ -440,6 +451,7 @@ def run_createbpm(fs=None):
         # for easy access in run_lacosmicx() 
         pyfits.setval(f,'BPM',value=outfile) # will be propagated down throughout the stages ;)   
     
+
 def run_background(fs=None):
     if fs is None: fs = glob('rec/*rec*c*.fits') 
     if len(fs)==0:
@@ -447,7 +459,7 @@ def run_background(fs=None):
         return
     
     # Get rectified science images and gr-angles
-    (scifs,scigas) = get_ims(fs,'sci')
+    scifs,scigas = get_ims(fs,'sci')
     if not os.path.exists('bkg'):os.mkdir('bkg')
     for i,f in enumerate(scifs):
         # Run automated 2D background subtraction on each individual chip image
@@ -464,6 +476,7 @@ def run_background(fs=None):
         hdu.writeto(outfile) # saving the updated file (data changed)
         os.remove('auxbkg.fits')
         ###### modify/shorten preservefits() to do the above instead if possible, or use data_ext keyword, saves lines
+
     
 def run_lax(fs=None):
     fs = glob('bkg/*bkg*.fits')
@@ -472,7 +485,7 @@ def run_lax(fs=None):
         return
     
     # Get background-subtracted chip-based science images and gr-angles.
-    (scifs,scigas) = get_ims(fs,'sci')
+    scifs,scigas = get_ims(fs,'sci')
     if not os.path.exists('lax'):os.mkdir('lax')
     for i,f in enumerate(scifs):
         outname_img = 'lax/'+f[4:12]+'lax'+f[15:]
@@ -501,9 +514,9 @@ def run_lax(fs=None):
 def run_remosaic(fs=None): 
     '''
     Our algorithm currently involves running apall on the non-2D-bkg-subtracted images
-    so we can just use the non-split_by_chip()-processed rectified images.
+    so we can just use the non-run_unmosaic()-processed rectified images.
     But also, instead of using the lacosmicx output science images, we want to manually
-    flag all cosmic rays in the rectified image's BPM based on the lacosmicx cosmic ray pixel mask (CPM).
+    flag all cosmic ray pixels in the rectified image based on the lacosmicx cosmic ray pixel mask (CPM).
     So for now (unless we change the algorithm), we just want to mosaic the BPM and CPM images. - VP
     '''
     fs = glob('bpm/*bpm*.fits')
@@ -512,7 +525,7 @@ def run_remosaic(fs=None):
         return
     
     # Loop over the mosaiced rectified science images
-    (scifs,scigas) = get_ims(glob('rec/*rec*.fits'),'sci')
+    scifs,scigas = get_ims(glob('rec/*rec*.fits'),'sci') # THIS LOOP IS BAD, includes individual chips, maybe add len(name) check - VP
     for i,f in enumerate(scifs):
         ga,imgnum = scigas[i],f[11:f.index('.fits')]
         folder = {'bpm':'bpm/','cpm':'lax/'} # prefix for outfile names
@@ -532,21 +545,164 @@ def run_remosaic(fs=None):
             pyfits.setval(f,masktype.upper(),value=outfile) # will be propagated down throughout the stages ;)  
         
 
+def run_flagcosmics(fs=None):
+    '''
+    Instead of using the lacosmicx cleaned output image, we will flag cosmic ray pixels in the science data
+    such that apall will reject those pixels when doing the variance-weighted extraction.
+    '''
+    fs = glob('lax/*cpm*.fits') # BAD glob, includes the unmosaiced images (c# before .fits) -VP
+    if len(fs)==0:
+        print "ERROR: No mosaiced cosmic ray pixel masks available."
+        return
+    
+    # Loop over the mosaiced rectified science images
+    scifs,scigas = get_ims(glob('rec/*rec*.fits'),'sci') # THIS LOOP IS BAD, includes unmosaiced imgs, maybe add len(name) check - VP
+    for i,f in enumerate(scifs):
+        ga,imgnum = scigas[i],f[11:f.index('.fits')]
+        # Since CPM.shape == f.shape, just change each cosmic ray pixel in the data (f) to -100000 (way below apall threshold)
+        cpmfile = 'lax/sci%0.2fcpm%03i.fits'%(ga,imgnum)
+        hducpm = pyfits.open(cpmfile)
+        datacpm = hducpm[0].data.copy()
+        hducpm.close()
+        hdu = pyfits.open(f,mode='update')
+        data = hdu[1].data.copy()
+        cosmicIndices = np.where(datacpm == 1)[0] # 1 ==> cosmic ray pixel
+        data[cosmicIndices] = -1000000 # way below apall threshold, so will be rejected during extraction
+        hdu[1].data = data 
+        hdu.flush() # Just doing the flagging in the original image, not saving to new one
+        hdu.close()
+
 def run_extract(fs=None):
-    #For each science image
-    #run apall
+    '''
+    We will only run apall with one set of default parameters so the user doesn't have to deal with a prompt.
+    These default parameters were found by us to be an optimal generalized set.
+    The user will be reminded in the terminal that they can change parameters (e.g., nsum) in the interactive window.
+    It will be assumed that bright SNe can be extracted just as well using faint SNe apall parameters, but not vice versa.
+    Since we are running apall on the non-2D-bkg-subtracted images, local bkg subtraction is necessary so it will be on by default.
+    It will be up to the user to carefully define the background regions, especially for faint or extended objects.
+    A pre-sky-subtracted-level (pssl) is not added back into the non-2D-bkg-sub image.
+    However, it might be necessary based on previous reductions that 2d-bkg-sub images (+pssl) should be used for very faint spectra.
+    '''
+    fs = glob('rec/*rec*.fits') # BAD glob, includes the unmosaiced images (c# before .fits) -VP
+    if len(fs)==0:
+        print "ERROR: No rectified images available for extraction."
+        return
+    
+    # For each science image, run apall
+    scifs,scigas = get_ims(fs,'sci') # THIS LOOP IS BAD, includes unmosaiced imgs, maybe add len(name) check - VP
+    if not os.path.exists('ext'):os.mkdir('ext')
+    
+    print "APALL: you can change parameters in the interactive apall window."
+    print "       No continuum? Make nsum small (~-5) centered on an emission line."
+    print "       See pipeline documentation for more help and apall tricks."
+    for i,f in enumerate(scifs):
+        ga,imgnum = scigas[i],f[11:f.index('.fits')]
+        outfile = 'ext/sci%0.2fext%03i.fits'%(ga,imgnum)
+        ##### IMPORTANT: make sure relevant keys in 0- or 1-ext-header to prevent pyfits crashes: GAIN (1?), RDNOISE?, DISPAXIS -VP
+        ##### IMPORTANT: check if you can change 'line' inside of apall; that is important for non-continuum/extended/faint objects -VP
+        #####            this is also where and why ds9 for extract() helps, just nice to see 2D. lots to remember/write otherwise.
+        #####            plus, apall window is popping up anyway, unlike in rectify()
+        ##### IMPORANT:  make sure lsigma and usigma thresholds are enough to reject the cosmic ray pixels (value=1000000) from sum
+        saltgain = pyfits.getval(f,'GAIN') 
+        iraf.unlearn(iraf.apall)
+        iraf.apall(input=f+'[1]',output='auxext.fits',interactive='yes',review='no',line='INDEF',nsum=-1000,lower=-3.5,upper=3.5,
+                   b_function='legendre',b_order=1,b_sample='-15:-10,10:15',b_naverage=-5,b_niterate=0,b_low_reject=3.0,
+                   b_high_reject=3.0,b_grow=0.0,nfind=1,t_nsum=50,t_step=15,t_nlost=100,t_function='legendre',t_order=3,
+                   t_naverage=1,t_niterate=3,t_low_reject=1.0,t_high_reject=1.0,t_grow=1.0,background='fit',weights='variance',
+                   pfit='fit1d',clean='yes',readnoise=0,gain=saltgain,lsigma=2.0,usigma=2.0)
+        hduaux = pyfits.open('auxext.fits')
+        hdraux = hduaux[0].header.copy() # Need to replace old 1-ext-header with this, but transfer keywords as necessary
+        hdraux['EXTNAME'] = 'SCI'
+        hdraux['EXTVER'] = 1
+        dataaux = hduaux[0].data.copy()
+        hduaux.close()
+        hdu = pyfits.open(f)
+        hdu[1].header = hdraux
+        hdu[1].data = dataaux
+        hdu.writeto(outfile)
+        hdu.close()
+        os.remove('auxext.fits')
+        
     #run apsum on the corresponding arc image
+    arcfs,arcgas = get_ims(fs,'arc')
+    for i,f in enumerate(arcfs):
+        ga,imgnum = arcgas[i],f[11:f.index('.fits')]
+        outfile = 'ext/arc%0.2fext%03i.fits'%(ga,imgnum)
+        pyfits.setval(f,'DISPAXIS',ext=1,value=1) # just in case
+        ''' PROBLEM: can the search for refsci be made more efficient? (without choosing unmosaiced chip images) '''
+        refsci = ''
+        for s in scifs:
+            if s[3:8] == '%0.2f'%(ga) and len(s) == 19: # standard length for filenames if they don't have c# before .fits (and no imcombine)
+                refsci = s # apsum will adopt trace of this corresponding science spectrum
+        if refsci == '':
+            print "ERROR: no reference science to run apsum on arcs with."
+            return
+        iraf.unlearn(iraf.apsum)
+        iraf.apsum(input=f+'[1]',output='auxext_arc.fits',references=refsci,interactive='no',review='no',background='no'
+                   nsum=50,lsigma=2.0,usigma=2.0)
+        hduaux = pyfits.open('auxext_arc.fits')
+        hdraux = hduaux[0].header.copy() # Need to replace old 1-ext-header with this, but transfer keywords as necessary
+        hdraux['EXTNAME'] = 'SCI'
+        hdraux['EXTVER'] = 1
+        dataaux = hduaux[0].data.copy()
+        hduaux.close()
+        hdu = pyfits.open(f)
+        hdu[1].header = hdraux
+        hdu[1].data = dataaux
+        hdu.writeto(outfile)
+        hdu.close()
+        os.remove('auxext_arc.fits')
+        
+        ##### IMPORTANT: can save lines by verifying preservefits() and using that to accomplish the aux.fits -> outfile.fits transfer
+        
+    
+    apextract.apsum.review='no'
+	apextract.apsum.background='none'
+	apextract.apsum.format='multispec'
+	# apextract.apsum.clean='yes'
+	# apextract.apsum.weights='variance'
+	apextract.apsum.nsum=50
+	apextract.apsum.lsigma=2.0
+	apextract.apsum.usigma=2.0
+	# need to specify extraction extension (1, not 0) since there are 2
+	twodimage = twodimage+'[1]'
+	# If running task individually, pop up epar window to let users change parameters if they want.
+	if customRun == True:
+		while True: 
+			eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
+			if eparAnswer == '0' or eparAnswer == '1':
+				break
+			else:
+				print "Invalid input: you must enter either 0 (no) or 1 (yes)."		
+		if eparAnswer == '1':
+			iraf.eparam(apextract.apsum)
+	# This runs apextract.apsum
+    
+    
     #run apsum on the corresponding sky image.
-    return
+    ##### Not doing this right now since generally local bkg sub on non-2d-bkg-sub images yields a decent sky spectrum band.
+    
 
-def run_identify1d(): # unnecessary at the moment given that we are doing pysalt specidentify manually -VP
-    #For each one d arc extraction
-    #run iraf identify on the spectrum
+def run_checksky(fs=None):
+    '''
+    Since we do pysalt specidentify manually, there's no reason to do identify1d+dispcor.
+    Instead, do a quick cross-correlation of the skylines band against a good reference sky spectrum.
+    Print a warning if the error (wavelength shift/lag) is more than 1AA.
+    '''
+    
+    ##### What's the best way to estimate the "error"? Cross-correlation shift/lag or some kind of fitting?
+    ##### Should the shift be applied to the dispersion parameters? I guess only if not > 1AA?
+    
+    
     return
+    
+def run_split1d(fs=None)
+    '''
+    We want to split the individual spectra into 
+    '''
 
-def run_dispcor1d(): # unnecessary at the moment given that we are doing pysalt specidentify manually -VP
-    #For each 1d arc 
-    #run iraf dispcor on the science and sky images
+    ##### Turn chipGapPix in run_remosaic() into a global variable
+    
     return
 
 def run_stdsensfunc():
@@ -555,14 +711,18 @@ def run_stdsensfunc():
 def run_fluxcal():
     return 
 
-def run_speccombine():
-    return 
-
 def run_stdtelluric():
     return 
 
 def run_telluric():
     return 
+    
+def run_fluxscale()
+    return
+
+def run_speccombine():
+    return 
+
 
 if __name__ == '__main__':
     if sys.version_info[1] >= 7 or sys.version_info[0] > 2:
