@@ -654,30 +654,7 @@ def run_extract(fs=None):
         os.remove('auxext_arc.fits')
         
         ##### IMPORTANT: can save lines by verifying preservefits() and using that to accomplish the aux.fits -> outfile.fits transfer
-        
-    
-    apextract.apsum.review='no'
-	apextract.apsum.background='none'
-	apextract.apsum.format='multispec'
-	# apextract.apsum.clean='yes'
-	# apextract.apsum.weights='variance'
-	apextract.apsum.nsum=50
-	apextract.apsum.lsigma=2.0
-	apextract.apsum.usigma=2.0
-	# need to specify extraction extension (1, not 0) since there are 2
-	twodimage = twodimage+'[1]'
-	# If running task individually, pop up epar window to let users change parameters if they want.
-	if customRun == True:
-		while True: 
-			eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-			if eparAnswer == '0' or eparAnswer == '1':
-				break
-			else:
-				print "Invalid input: you must enter either 0 (no) or 1 (yes)."		
-		if eparAnswer == '1':
-			iraf.eparam(apextract.apsum)
-	# This runs apextract.apsum
-    
+            
     
     #run apsum on the corresponding sky image.
     ##### Not doing this right now since generally local bkg sub on non-2d-bkg-sub images yields a decent sky spectrum band.
