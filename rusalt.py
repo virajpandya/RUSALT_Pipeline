@@ -8,8 +8,7 @@ import sys,os,shutil
 from glob import glob
 from pyraf import iraf
 import pyfits
-from numpy import array, unique, median, std, append
-import numpy as np
+import numpy as np 
 import fnmatch
 iraf.pysalt()
 iraf.saltred()
@@ -197,7 +196,7 @@ def get_ims(fs,imtype):
         if pyfits.getval(f,'OBSTYPE')==typekeys[imtype]: 
             ims.append(f)
             grangles.append(pyfits.getval(f,'GR-ANGLE'))
-    return array(ims),array(grangles)
+    return np.array(ims),np.array(grangles)
 
 def run_makeflats(fs=None):
     #Note the list of files need to not include any paths relative to the work directory
@@ -218,7 +217,7 @@ def run_makeflats(fs=None):
     
     os.mkdir() 
     #For each grating angle
-    for ga in unique(grangles):
+    for ga in np.unique(grangles):
         #grab the flats for this gr angle
         flats = allflats[grangles == ga]
         
@@ -257,7 +256,7 @@ def run_makeflats(fs=None):
             combinehdu = pyfits.open(combineoutname)
             ny = combinehdu[0].data.shape[0]
             #divide out the illumination correction before running response
-            flat1d = median(combinehdu[0].data[ny/2 - 21: ny/2 +20,:].copy() / illumhdu[0].data[ny/2 - 21: ny/2 +20,:].copy() ,axis=0)
+            flat1d = np.median(combinehdu[0].data[ny/2 - 21: ny/2 +20,:].copy() / illumhdu[0].data[ny/2 - 21: ny/2 +20,:].copy() ,axis=0)
             #close the illumination file because we don't need it anymore
             illumhdu.close()
             
@@ -276,10 +275,10 @@ def run_makeflats(fs=None):
             
             #After response divide out the response function
             #normailze the 1d resp to its median
-            resp1d/= median(resp1d)
+            resp1d/= np.median(resp1d)
             
             #Chuck any outliers
-            flatsig = std(resp1d - 1.0)
+            flatsig = np.std(resp1d - 1.0)
             resp1d[abs(resp1d - 1.0) > 5.0 * flatsig] = 1.0
             resp = flat1d/resp1d
             
@@ -312,8 +311,8 @@ def run_flatten(fs = None):
     scifs, scigas = get_ims(fs,'sci')
     arcfs, arcgas = get_ims(fs,'arc')
 
-    ims = append(scifs,arcfs)
-    gas = append(scigas, arcgas)
+    ims = np.append(scifs,arcfs)
+    gas = np.append(scigas, arcgas)
     #For each science and arc image
     for i,f in enumerate(ims):
         thishdu = pyfits.open(f)
@@ -347,8 +346,8 @@ def run_mosaic(fs=None):
     #Get the images to work with
     scifs, scigas = get_ims(fs,'sci')
     arcfs, arcgas = get_ims(fs,'arc')
-    ims = append(scifs,arcfs)
-    gas = append(scigas, arcgas)
+    ims = np.append(scifs,arcfs)
+    gas = np.append(scigas, arcgas)
     
     if not os.path.exists('mos'):os.mkdir('mos')
     for i,f in enumerate(ims): 
@@ -401,8 +400,8 @@ def run_rectify(fs=None):
     scifs,scigas = get_ims(glob('mos/*mos*.fits'),'sci')
     arcfs,arcgas =get_ims(glob('mos/*mos*.fits'),'arc')
     
-    ims = append(scifs,arcfs)
-    gas = append(scigas, arcgas)
+    ims = np.append(scifs,arcfs)
+    gas = np.append(scigas, arcgas)
     
     if not os.path.exists('rec'):os.mkdir('rec')
     for i,f in enumerate(ims): 
@@ -679,7 +678,7 @@ def run_extract(fs=None):
     #run apsum on the corresponding sky image.
     ##### Not doing this right now since generally local bkg sub on non-2d-bkg-sub images yields a decent sky spectrum band.
     
-
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%% I will return to this tomorrow
 def run_checksky(fs=None):
     '''
     Since we do pysalt specidentify manually, there's no reason to do identify1d+dispcor.
@@ -778,7 +777,7 @@ def run_split1d(fs=None)
         ##### Also, eventually write a function to transfer important 0-ext-header keywords to the 1-ext-header
         ##### since get_ims() uses the 0-ext-header but chip gap spectra only have 1 extension (and the 1-ext-header for dispersion).
 
-
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%% I will return to this tomorrow
 def run_stdsensfunc(fs=None):
     ''' 
     Produces 1D extracted std star spectrum and corresponding sensfunc. (So, runs onedspec.standard and onedspec.sensfunc)
@@ -843,7 +842,7 @@ def run_prepstandards(fs=None):
         pyfits.setval(f,'RUSTD',ext=0,value=beststd[-24:]) # beststd contains path => reverse indices
         pyfits.setval(f,'RUSENS',ext=0,value=bestsen[-24:])    
     # Now call run_split1d() on beststd and bestsen (will just append c# before .fits for each chip file)
-    ims = append(beststds,bestsens) # should ideally add 'RUSENS' and 'RUSTD' header keywords to chip science spectra for easy access
+    ims = np.append(beststds,bestsens) # should ideally add 'RUSENS' and 'RUSTD' header keywords to chip science spectra for easy access
     run_split1d(fs=ims)
 
 
@@ -883,6 +882,7 @@ def run_fluxcal(fs=None):
             hdu.close()
 
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%% I will clean this up tomorrow or friday, after talking to Curtis
 def run_pytelluric(fs=None):
     '''
     Essentially copied from our working pipeline's relatively standalone PyTelluric module.
