@@ -37,6 +37,9 @@ chipGapPix = {'2 2':((1010,1095),(2085,2160)),'2 4':((1035,1121),(2115,2191)),'4
 possiblestds = glob(standardsPath+'m*.dat') # standardsPath is a global variable for PySALT standards directory
 for n,s in enumerate(possiblestds): possiblestds[n] = (s.split('.'))[0][1:].lower() # remove m prefix & .fits suffix => std star name
 
+# Define the telluric B and A band begin:end wavelengths here (used in run_stdsensfunc() and run_pytelluric()).
+telluricWaves = {'B':(6855,6935),'A':(7590,7685)} # these were carefully chosen
+
 #Define the stages: Pysalt, LAcosmicx, Flatcombine, flatten, 'mosaic', 2D Identify, Rectify, Extract (Sci and Arcs), 1D Identify, 
 #if standard, calculate flux calibration, Flux calibrate, if standard calculate telluric, telluric correction
 allstages = ['pysalt','makeflats','flatten','mosaic','combine2d','identify2d', 'rectify', 'background','lax','extract','identify1d','dispcor1d'
@@ -392,8 +395,8 @@ def run_identify2d(fs=None):
         idfile = 'id2/arc%0.2fid2%03i'%(ga,imgnum)+'.db' 
         iraf.unlearn(iraf.specidentify); iraf.flpr()
         iraf.specidentify(images=f,linelist=lamplines,outfile=idfile,guesstype='rss',automethod='Matchlines',
-        			      function='legendre',order=3,rstep=100,rstart='middlerow',mdiff=5,inter='yes',
-        			      startext=1,clobber='yes',verbose='yes')
+                          function='legendre',order=3,rstep=100,rstart='middlerow',mdiff=5,inter='yes',
+                          startext=1,clobber='yes',verbose='yes')
 
 def run_rectify(fs=None):
     if fs is None: fs = glob('id2/arc*id2*.db') 
@@ -415,7 +418,7 @@ def run_rectify(fs=None):
             outfile = 'rec/'+typestr+'%0.2frec'%(ga)+imgnum+'.fits'
             iraf.unlearn(iraf.specrectify); iraf.flpr()
             iraf.specrectify(images=f,outimages=outfile,solfile='arc%0.2fsol'%(ga)+'.fits',outpref='',caltype='line',
-						     function='legendre',order=3,inttype='interp',clobber='yes',verbose='yes') 	   		  
+                             function='legendre',order=3,inttype='interp',clobber='yes',verbose='yes')            
 
 def run_unmosaic(fs=None):
     if fs is None: fs = glob('rec/*rec*.fits') 
@@ -437,7 +440,7 @@ def run_unmosaic(fs=None):
         (c1min,c1max),(c2min,c2max) = chipGapPix[pyfits.getval(f,'CCDSUM')][0],chipGapPix[pyfits.getval(f,'CCDSUM')][1]
         # Copy 'GR-ANGLE' and 'OBSTYPE' from hdr0 to hdr1 for get_ims(); don't need to remove the keys since these split spectra
         # are only used in run_background() and run_lax(); we use the original *rec*.fits non-split spectra for apall.
-        for k in ['GR-ANGLE','OBSTYPE']: pyfits.setval(f,ext=1,k,value=pyfits.getval(f,k))
+        for k in ['GR-ANGLE','OBSTYPE']: pyfits.setval(f,k,ext=1,value=pyfits.getval(f,k))
         hdu = pyfits.open(f)
         data = hdu[1].data.copy()
         hdr1 = hdu[1].header.copy()
@@ -462,7 +465,7 @@ def run_createbpm(fs=None):
         iraf.unlearn(iraf.imexpr)
         iraf.imexpr(expr='a==0',output=outfile,a=f)
         # for record-keeping purposes
-        pyfits.setval(f,'BPM',value=outfile)   
+        pyfits.setval(f,'BPM',value=outfile)
     
 
 def run_background(fs=None):
@@ -513,9 +516,9 @@ def run_lax(fs=None):
         databpm = hdubpm[0].data.copy()
         hdubpm.close()
         # Run lacosmicx (assume that gain==1.0 because of iraf.pysalt.saltred.saltgain)
-        ''' what might we do about RDNOISE? '''
+        ''' what might we do about RDNOISE? adopt default value based on GAINSET and ROSPEED? '''
         datalax = lacosmicx.run(inmat=datain,inmask=databpm,outmaskfile=outname_msk,
-		                        sigclip=6.0,objlim=3.0,sigfrac=0.1,gain=1.0,pssl=mode,robust=True)
+                                sigclip=6.0,objlim=3.0,sigfrac=0.1,gain=1.0,pssl=mode,robust=True)
         # Update and save file
         hdu[0].data = datalax
         hdu.writeto(outname_img)
@@ -660,7 +663,7 @@ def run_extract(fs=None):
             print "WARNING: no reference science to run apsum on arcs with."
             return
         iraf.unlearn(iraf.apsum)
-        iraf.apsum(input=f+'[1]',output='auxext_arc.fits',references=refsci,interactive='no',review='no',background='no'
+        iraf.apsum(input=f+'[1]',output='auxext_arc.fits',references=refsci,interactive='no',review='no',background='no',
                    nsum=50,lsigma=2.0,usigma=2.0)
         hduaux = pyfits.open('auxext_arc.fits')
         hdraux = hduaux[0].header.copy() # Need to replace old 1-ext-header with this, but transfer keywords as necessary
@@ -699,7 +702,7 @@ def run_checksky(fs=None):
     ##### Here's my general code to cross-correlate and find the shift.
     ##### IMPORTANT: figure out what to use in place of mastersky.fits to cross-correlate blue bright lines.
     
-     ''' on hold since i wanted to finish up a few of the subsequent tasks -VP '''
+    ''' on hold since i wanted to finish up a few of the subsequent tasks -VP '''
     
     if fs is None: fs = glob('ext/sci*ext*.fits')
     if len(fs)==0:
@@ -715,19 +718,19 @@ def run_checksky(fs=None):
         hdu.close()
         # Construct the wavelength array using the dispersion parameters in the extension 1 header
         crpixsky = hdrsky['CRPIX1']
-	    cdsky = hdrsky['CD1_1']
-	    crvalsky = hdrsky['CRVAL1']
-	    wavesky = np.linspace(crvalsky,crvalsky+cdsky*(len(datasky)-crpixsky),len(datasky))
-	    
-	    # Similarly for skyLineSpectrum, which is a global variable for the path to the reference sky spectrum
-	    hdu = pyfits.open(skyLineSpectrum)
-	    
+        cdsky = hdrsky['CD1_1']
+        crvalsky = hdrsky['CRVAL1']
+        wavesky = np.linspace(crvalsky,crvalsky+cdsky*(len(datasky)-crpixsky),len(datasky))
+        
+        # Similarly for skyLineSpectrum, which is a global variable for the path to the reference sky spectrum
+        hdu = pyfits.open(skyLineSpectrum)
+        
         # Need to resample skyLineSpectrum to the same # of data points as the science spectrum (for proper x-corr)
     
     return
     
     
-def run_split1d(fs=None)
+def run_split1d(fs=None):
     '''
     We want to split the spectra into individual chip spectra.
     This will be done using the chipGapPix global dictionary (same as in run_unmosaic()) giving the 
@@ -773,47 +776,47 @@ def run_split1d(fs=None)
 
 def run_stdsensfunc(fs=None):
     ''' 
-    Produces 1D extracted std star spectrum and corresponding sensfunc. (So, runs onedspec.standard and onedspec.sensfunc
-    and moves the non-flux-cal std star spectra and sensfuncs to the pipeline's standards directory (global variable pipeStandardsPath).
-    By construction, this function will only run if it finds standards in the current directory. It is up to the user
-    to make sure the pipeline is run in a *separate* std star reduction directory where the standards have their own arcs.
-    For fast reductions, skip to run_prepstandards() which should pull the appropriate std star spectrum and sensfunc from the archive.
+    For std star reductions, produces one sensfunc per chip per gr-angle. 
+    For science reductions, will be skipped in favor of run_prepstandards() below.
     '''
     if fs is None: fs = glob('ext/sci*ext*c*.fits')
     if len(fs)==0:
-        print "WARNING: No extracted spectra to create sensfuncs from."
+        print "WARNING: No chip-split extracted spectra to create sensfuncs from."
         return
-    # Only run this function for std star reductions. Since it's assumed that the pipeline is run EITHER for science or 
-    # std star data, but not a combination of both, it should suffice to check if just one object doesn't have a std star name.
+    # Only run this function for std star reductions. If even just one non-std-star object is detected, skip step.
     for f in fs: # hidden but reasonable assumption: if std star reduction, all objects have the same std star name
         if (pyfits.getval(f,'OBJECT')).lower() not in possiblestds: # possiblestds is a global variable of pysalt std star names
             print f+" is not a standard star object; skipping run_stdsensfunc()."
             return
     
-    # Run iraf.onedspec.standard and iraf.onedspec.sensfunc for each split chip spectrum
+    # Run iraf.onedspec.standard and iraf.onedspec.sensfunc for each chip-split spectrum
     if not os.path.exists('flx'):os.mkdir('flx')
     stdfs,stdgas = get_ims(fs,'sci') # grabs the spectra and gr-angles (std == sci for std star reductions)
     for i,f in enumerate(stdfs):
-        ga,binning,chipnum = '%0.2f'%(stdgas[i]),(pyfits.getval(f,'CCDSUM')).replace(' ',''),f[-6] # chipnum from naming convention
-        outfile_std = 'flx/std'+ga+'c'+chipnum
+        ga,chipnum = '%0.2f'%(stdgas[i]),f[-6] # chipnum from naming convention
+        outfile_std = 'flx/std'+ga+'c'+chipnum # iraf.onedspec.standard bandpass output name
+        # Automatically run iraf.onedspec.standard; bad bandpasses will be removed after.
         iraf.unlearn(iraf.onedspec.standard)
         iraf.onedspec.standard(input=f,output=outfile_std,caldir=standardsPath,extinction='',interact='NO',
                                airmass=pyfits.getval(f,'AIRMASS'),exptime=pyfits.getval(f,'EXPTIME'),
                                answer='NO',bandwidth=50.0,bandsep=20.0,star_name='m'+(pyfits.getval(f,'OBJECT')).lower())
-        # Need to remove bandpasses (indexed by wavelengths) in the std file which fall in the telluric B or A band
+        # First, remove bandpasses in outfile_std which fall in the telluric B or A band
+        # telluricWaves is a global variable (dict) which returns (begin,end) wavelengths for B and A bands
+        telluricB,telluricA = telluricWaves['B'],telluricWaves['A']
         f = open(outfile_std,mode='r')
         lines = f.readlines()
         f.close()
         hdrline,datalines = lines[0],lines[1:] # don't want to include header line in data array
-        f = open(outfile_std,mode='w') # deletes all previous content, will rewrite only non-telluric bandpass data lines
+        f = open(outfile_std,mode='w') # we will rewrite only non-telluric bandpass data lines
         f.write(hdrline)
         for l in datalines:
             w = float((l.split())[0]) # wavelength (first column)
-            if (w>=7600.0 and w<=7630.0) or (w>=6860.0 and w<=6890.0) or (w>=7170.0 and w<=7350.0):
-		        continue # don't write line because this is a bad (telluric) bandpass
-	        else:
-		        f.write(l) # good (non-telluric) bandpass
+            if (w>=telluricB[0] and w<=telluricB[1]) or (w>=telluricA[0] and w<=telluricA[1]):
+                continue # don't write line because this is a bad (telluric) bandpass
+            else:
+                f.write(l) # write good (non-telluric) bandpass
         f.close()
+        # Next, remove bandpasses in outfile_std which fall in chip gaps (both chip gaps are only in *c2.fits)
         # By construction, chip gap 1 is at the beginning of and chip gap 2 is at the end of '*c2.fits' (the middle ["chip 2"] spectrum)
         # So, if this file is *c2.fits, then we need to remove the bandpasses that fall in chip gaps.
         if chipnum == '2':
@@ -822,14 +825,14 @@ def run_stdsensfunc(fs=None):
             crval,crpix,cd1 = pyfits.getval(f,'CRVAL1'),pyfits.getval(f,'CRPIX1'),pyfits.getval(f,'CD1_1')
             waves,pixels = np.linspace(crval,crval+cd1*(len(data)-crpix),len(data)),np.arange(len(data))
             # chipGapPix is a global variable (see beginning of code) which we can use to get the length of each chip gap
-            # We can't use these pixel numbers since they are for the non-split (all-3-chip) spectra
+            # We can't immediately use chipGapPix pixel numbers since they are for the non-split (all-3-chip) spectra
             (c1min,c1max),(c2min,c2max) = chipGapPix[pyfits.getval(f,'CCDSUM')][0],chipGapPix[pyfits.getval(f,'CCDSUM')][1]
             len_c1,len_c2 = c1max-c1min+1,c2max-c2min+1 # tells us how many pixels the chip gaps span
-            # Since the chip gaps are at the beginning and end, use their lengths to find their pix # in this c2*.fits spectrum slice
+            # Since the chip gaps are at the beginning and end, use their lengths to find their pix # in this c2*.fits chip-split spectrum
             c1_maxpix,c2_minpix = len_c1,len(data)-len_c2 # c1_minpix = 0, c2_maxpix = len(data) by construction
             wavesc1 = waves[np.logical_and(pixels>=0,pixels<=c1_maxpix)] # wavelengths of first chip gap
             wavesc2 = waves[np.logical_and(pixels>=c2_minpix,pixels<=len(data))] # wavelengths of second chip gap
-            # Finally, remove chip gap bandpasses in the same way as was done for telluric bandpasses
+            # Finally, remove chip gap bandpass data lines in the same way as was done for telluric bandpasses
             f = open(outfile_std,mode='r')
             lines = f.readlines()
             f.close()
@@ -839,12 +842,12 @@ def run_stdsensfunc(fs=None):
             for l in datalines:
                 w = float((l.split())[0]) # wavelength (first column)
                 if (w>=np.min(wavesc1) and w<=np.max(wavesc1)) or (w>=np.min(wavesc2) and w<=np.max(wavesc2)):
-		            continue # don't write line because this is a bad (chip gap) bandpass
-	            else:
-		            f.write(l) # good (non-chip-gap) bandpass
+                    continue # don't write line because this is a bad (chip gap) bandpass
+                else:
+                    f.write(l) # write good (non-chip-gap) bandpass
             f.close()
-         
-        # Now, run iraf.onedspec.sensfunc using the automatically created std bandpass file   
+        
+        # Now, run iraf.onedspec.sensfunc using the modified outfile_std  
         outfile_sens = 'flx/sens'+ga+'c'+chipnum # Note sensfunc only wants root name, not .fits suffix
         iraf.unlearn(iraf.onedspec.sensfunc)
         iraf.onedspec.sensfunc(standards=outfile_std,sensitivity=outfile_sens,apertures='1',function='spline3',
@@ -853,43 +856,34 @@ def run_stdsensfunc(fs=None):
         for k in ['GR-ANGLE','CCDSUM']: pyfits.setval(outfile_sens,k,value=pyfits.getval(f,k))
         pyfits.setval(outfile_sens,'RUSTD',value=f)
         
-    ''' Should the user manually move the single-chip sensfuncs and std*flx*.fits files to the pipeline standards archive?
-    That's a lot of renaming to do given the naming convention defined in run_prepstandards(). 
-    Should the pipeline automatically move the files when the user hasn't even manually inspected the combined std star spectrum? '''
-
 
 def run_prepstandards(fs=None):
     '''
-    For quick, automated reductions using standards with reliable wavelength solutions
-    (i.e., standards which came with their own arcs), the pipeline should pull the relevant 1D
-    standard star spectra and corresponding sensfuncs from the main pipeline standards directory 
-    (defined by the global variable pipeStandardsPath).
-    The four criteria for relevant standards are: (1) gr-angle (2) binning (3) most recent (4) chip number
-    The naming convention for the std star spectra and corresponding sensfuncs was defined to 
-    make it easy to find standards that satisy those criteria. Here's an example:
-    '15.12b24std20140604c1.fits' and '15.12b24sen20140604c1.fits',
-    where 'b24' is for binning 2x4 ('CCDSUM'). Note that both strings have the same length.
+    For science reductions, pulls (chip-combined) flux-calibrated std star spectra
+    and sensfuncs for each gr-angle from the pipeline's std star archive.
+    For std star reductions, this step is skipped in favor of run_stdsensfunc() above.
+    IMPORTANT: see run_archivestds() below for the specific naming convention for pipeline-archived stds.
     '''
-    if fs is None: fs = glob('ext/sci*ext*c*.fits') 
+    if fs is None: fs = glob('ext/sci*ext*.fits') # BAD GLOB: includes chip-spectra ('*ext*c*.fits'); perhaps add len(name) check? 
     if len(fs)==0:
         print "WARNING: No extracted & split spectra to prepare standards for."
         return
     
-    # This function should not be run for std star reductions; if std star detected, return
+    # This function should not be run for std star reductions; if even just one std star detected, return
     for f in fs:
         if (pyfits.getval(f,'OBJECT')).lower() in possiblestds: # possiblestds is a global variable of pysalt std star names
             print "Standard star detected ("+f+"); skipping run_prepstandards()."
             return
     
-    # Loop over the chip-split extracted science spectra to find corresponding std star spectra and sensfuncs
+    # Loop over the non-split extracted science spectra to find corresponding std star spectra and sensfuncs
     scifs,scigas = get_ims(fs,'sci') # grabs the spectra and gr-angles
     if not os.path.exists('flx'):os.mkdir('flx')
     beststds,bestsens = [],[]
     for i,f in enumerate(scifs):
-        # First, find standards with the same gr-angle and binning
+        # First, find standards with the same gr-angle and binning (part of file naming convention; see run_archivestds())
         binning = (pyfits.getval(f,'CCDSUM')).replace(' ','') # CCDSUM format is '2 4' with the extra space in middle
         ga = '%0.2f'%(scigas[i])
-        prefix = ga+'b'+binning # prefix for archived std star filenames based on naming convention
+        prefix = ga+'b'+binning
         stds = glob(pipeStandardsPath+prefix+'std*.fits')
         if len(stds) == 0:
             print "WARNING: did not find a standard star to flux calibrate "+f
@@ -897,40 +891,22 @@ def run_prepstandards(fs=None):
         # Now, find the most recent standard
         dates = [] 
         for s in stds:
-            dates.append(int(s[11:19])) # According to the convenient naming convention
-        ''' the most recent date will be the greatest integer if format is yyyymmdd, but since there will be 3 separate chip spectra
-        at this date, need to choose the one with the same chip number as the current sci file f '''
-        beststd = stds[np.where(dates==np.max(dates))[0][0]]
-        # We just chose any one of the 3 separate chip spectra; now simply replace the chipnum with the one of sci file f
-        beststd[-6] = f[-6] # 6th character from the end is the chip number
+            dates.append(int(s[11:19])) # date is part of the naming convention, see run_archivestds()
+        beststd = stds[np.where(dates==np.max(dates))[0][0]] # the most recent date will be the greatest integer if format is yyyymmdd
         # Now pick the sensfunc which has the same naming convention except 'std' becomes 'sen' in the filename
         bestsen = beststd[-24:-16]+'sen'+beststd[-13:]
-        shutil.copyfile(beststd,'flx/'); shutil.copyfile(bestsen,'flx/')
+        shutil.copyfile(beststd,'flx/'); shutil.copyfile(bestsen,'flx/') # copy both to 'flx/' directory
         beststds.append(beststd); bestsens.append(bestsen)
         # Good idea to add the std and sensfunc filenames to science spectrum header for record-keeping and easy access in fluxcal()
         pyfits.setval(f,'RUSTD',ext=0,value=beststd[-24:]) # beststd contains path => reverse indices
         pyfits.setval(f,'RUSENS',ext=0,value=bestsen[-24:])
-        
-        ''' POSSIBLE ISSUE
-        2014-06-06: I changed this to pull chip-split flux-calibrated std star spectra. Before, I had coded it to pull 
-        the non-split extracted std star spectra and sensfuncs, and then call run_split1d() on them. The reason I liked that 
-        is because if we ever change the chipGapPix *convention*, there could be a mismatch between the chip gap begin:end 
-        pixel numbers in the current (new) science reduction and the archived already-chip-split spectra. It would be ideal 
-        to pull the *non-chip-split* flux-calibrated std star spectra so run_split1d() can split them using chipGapPix 
-        (which may have been updated since the std star spectra were archived), in the same manner as the science spectra.
-        However, this pipeline doesn't put together the chip spectra to re-create the gr-angle spectra. It only combines them
-        at the very end to create the full, combined spectrum. Again, this will only be an issue if the carefully chosen conventions 
-        defined by me in chipGapPix are changed by someone in the future (could happen if SALT starts using new chips). 
-        One solution is to turn the global variable chipGapPix into a function which runs as an early 2D stage, or if it is 
-        defined as part of the run_createbpm() task. That task creates the BPM so it finds the bad pixel masks (where counts == 0).
-        chipGapPix can then be created dynamically using the chip gap boundaries found by run_createbpm(). But this also requires
-        that we figure out a reliable way to merge the chip-split std star spectra into the individual gr-angle spectra 
-        (again, a step that is not normally done for science spectra due to the flux scaling + speccombine step). -VP
-        '''
+    # Now call run_split1d() on beststd and bestsen (will just append c# before .fits for each chip file)
+    ims = append(beststds,bestsens)
+    run_split1d(fs=ims) # should ideally add 'RUSENS' and 'RUSTD' header keywords to chip-split science spectra for record-keeping
 
 
 def run_fluxcal(fs=None):
-    ''' We have the sensfunc for each chip for each science and std star spectrum. So just run calibrate. '''
+    ''' We have the sensfunc per chip per gr-angle. So just run calibrate on chip-split science spectra. '''
     if fs is None: fs = glob('ext/sci*ext*c*.fits') # grabs individual chip science spectra
     if len(fs)==0:
         print "WARNING: No science chip spectra to flux calibrate."
@@ -938,23 +914,23 @@ def run_fluxcal(fs=None):
     
     # Loop over the science chip spectra, pull the relevant std star and sensfunc chip spectra as needed
     scifs,scigas = get_ims(fs,'sci') # grabs the spectra and gr-angles
-    if not os.path.exists('flx'):os.mkdir('flx') # in case for some reason run_prepstandards() wasn't run
+    if not os.path.exists('flx'):os.mkdir('flx')
     for i,f in enumerate(scifs):
-        ga,binning,chipnum = '%0.2f'%(scigas[i]),(pyfits.getval(f,'CCDSUM')).replace(' ',''),f[-6] # chipnum from naming convention
+        # Get gr-angle, binning, and chipnum, all of which are necessary for sensfunc filenames
+        ga,binning,chipnum = '%0.2f'%(scigas[i]),(pyfits.getval(f,'CCDSUM')).replace(' ',''),f[-6]
         outfile = f[-24:-13]+'flx'+f[-10:] # based on naming convention, just replace 3-char stage 'ext' with 'flx'
-        # Grab the std star spectrum and sensfunc by assuming that only 1 of each is present for each gr-angle, see run_prepstandards()
-        std,sens = glob('flx/'+ga+'b'+binning+'std*c'+chipnum+'.fits')[0],glob('flx/'+ga+'b'+binning+'sen*c'+chipnum+'.fits')[0]
-        outstd = std[-24:-16]+'flx'+std[-13:] # See run_stdsensfunc() for naming convention; replacing 'std' with 'flx' preserves len(std)
-        # Finally, calibrate the science and standard star spectra (note: sensitivity=sens without .fits)
-        iraf.unlearn(iraf.calibrate)
-        iraf.calibrate(input=f,output='auxflx_sci.fits',extinct='no',extinction='',sensitivity=sens[-24:-5],ignoreaps='yes',
-                       exptime=pyfits.getval(f,'EXPTIME'),airmass=pyfits.getval(f,'AIRMASS'))
-        iraf.unlearn(iraf.calibrate)
-        iraf.calibrate(input=std,output='auxflx_std.fits',extinct='no',extinction='',sensitivity=sens[-24:-5],ignoreaps='yes',
-                       exptime=pyfits.getval(std,'EXPTIME'),airmass=pyfits.getval(std,'AIRMASS'))
-        # Transfer the data to a copy of the existing chip spectra (with the correct headers)
-        transfers = [('auxflx_sci.fits',f,outfile),('auxflx_std.fits',std,outstd)]
-        for aux,ref,new in transfers:
+        # Get sensfunc: tricky because naming convention is different for archived sensfuncs and std star reduction sensfuncs
+        # Either way, assume that only 1 sensfunc is present per chip per gr-angle (see run_prepstandards())
+        if (pyfits.getval(f,'OBJECT')).lower() in possiblestds: # possiblestds is a global variable of pysalt std star names
+            sens = glob('flx/sens'+ga+'c'+chipnum+'.fits')[0] # see run_stdsensfunc() for naming convention
+        else: # science reduction, so archived sensfunc naming convention
+            sens = glob('flx/'+ga+'b'+binning+'sen*c'+chipnum+'.fits')[0] # see run_archivestds() for naming convention
+        # Run calibrate the science spectrum (note: sensitivity=sens without .fits suffi)
+        iraf.onedspec.unlearn(iraf.onedspec.calibrate)
+        iraf.onedspec.calibrate(input=f,output='auxflx_sci.fits',extinct='no',extinction='',sensitivity=sens[-24:-5],
+                                ignoreaps='yes',exptime=pyfits.getval(f,'EXPTIME'),airmass=pyfits.getval(f,'AIRMASS'))
+        # Transfer data to a copy of the existing chip spectra (and update the header with new keys from iraf.onedspec.calibrate)
+        for aux,ref,new in ('auxflx_sci.fits',f,outfile):
             hduaux = pyfits.open(aux)
             dataaux = hduaux[0].data.copy()
             hduaux.close()
@@ -965,7 +941,6 @@ def run_fluxcal(fs=None):
             # Transfer calibrate's new keywords to the existing header: extinction, calibration, dispersion sampling flags, and flux units
             for k in ['EX-FLAG','CA-FLAG','DC-FLAG','BUNIT']: pyfits.setval(new,k,value=pyfits.getval(aux,k))
             os.remove(aux)
-
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%% I will clean this up tomorrow or friday, after talking to Curtis
 def run_pytelluric(fs=None):
@@ -981,6 +956,12 @@ def run_pytelluric(fs=None):
     if len(fs)==0:
         print "WARNING: No flux-calibrated science chip spectra to telluric-correct."
         return
+    
+    # This function should not be run for std star reductions; if std star detected, return
+    for f in fs:
+        if (pyfits.getval(f,'OBJECT')).lower() in possiblestds: # possiblestds is a global variable of pysalt std star names
+            print "Standard star detected ("+f+"); skipping run_pytelluric()."
+            return
     
     # Loop over the science chip spectra, pull the relevant std star and sensfunc chip spectra as needed
     scifs,scigas = get_ims(fs,'sci') # grabs the spectra and gr-angles
@@ -1015,23 +996,15 @@ def run_pytelluric(fs=None):
         crvalsci = hdrsci['CRVAL1']
         wavesci = np.linspace(crvalsci,crvalsci+cdsci*(len(datsci)-crpixsci),len(datsci))
 
-        # Define and combine telluric band wavelength and interpolation ranges here.
-        beginA = 7590 # Fraunhofer telluric A band (O_2)
-        endA = 7685
-        beginB = 6855 # Fraunhofer telluric B band (O_2)
-        endB = 6935
-        beginC = 6270 # Fraunhofer telluric a band (O_2)
-        endC = 6310 # The a-band is not always present or properly resolved in the spectra => sometimes meaningless correction
-
+        # Define telluric B & A band wavelength ranges; telluricWaves is a global variable which returns (begin,end) wavelengths
+        (beginB,endB),(beginA,endA) = telluricWaves['B'],telluricWaves['A']
+        # Define interpolation ranges to clip the B and A band telluric data (for scaling, etc.)
         beginAinterp = 7500
         endAinterp = 7750
         beginBinterp = 6800
         endBinterp = 7000
-        beginCinterp = 6200
-        endCinterp = 6400
-
-        telluricLines = [(beginA,endA,beginAinterp,endAinterp),(beginB,endB,beginBinterp,endBinterp)] # not doing a-band (called by me "C")
-
+        # Create an array to loop over the telluric correction regions.
+        telluricLines = [(beginA,endA,beginAinterp,endAinterp),(beginB,endB,beginBinterp,endBinterp)]
         # Begin telluric correction process.
         corsci = datsci.copy()
         for beginT,endT,beginTinterp,endTinterp in telluricLines:
@@ -1064,14 +1037,14 @@ def run_pytelluric(fs=None):
             if len(datstdT) > len(datsciT):
                 #print("Correcting for len(datSTD) > len(datasci) by "+str(np.abs(len(datstdT)-len(datsciT)))+"px")
                 for i in np.arange(np.abs(len(datstdT)-len(datsciT)))+1: # remove last element
-	                wavestdT = wavestdT[0:-i]
-	                datstdT = datstdT[0:-i]
+                    wavestdT = wavestdT[0:-i]
+                    datstdT = datstdT[0:-i]
             elif len(datstdT) < len(datsciT):
                 #print("Correcting for len(datSTD) < len(datasci) by "+str(np.abs(len(datstdT)-len(datsciT)))+"px")
                 for i in np.arange(np.abs(len(datstdT)-len(datsciT)))+1: # add element from shifted std star arrays
-	                maxInd = (np.where(np.logical_and(wavestdS>beginT,wavestdS<endT)))[0].max()
-	                wavestdT = np.append(wavestdT,wavestdS[maxInd+i]) # extend the smaller array to match the larger
-	                datstdT = np.append(datstdT,datstd[maxInd+i])
+                    maxInd = (np.where(np.logical_and(wavestdS>beginT,wavestdS<endT)))[0].max()
+                    wavestdT = np.append(wavestdT,wavestdS[maxInd+i]) # extend the smaller array to match the larger
+                    datstdT = np.append(datstdT,datstd[maxInd+i])
             # Scale, shift, and stretch standard star sub-spectrum to match science sub-spectrum.
             fitfunc = lambda p,x: (p[0]+p[1]*x)*datstdT
             errfunc = lambda p,x,y: fitfunc(p,x) - y
@@ -1106,23 +1079,42 @@ def run_pytelluric(fs=None):
         hdu[0].data = sciFinal
         hdu.writeto(outfile)
         hdu.close()
+
     
-    
+# Should we put this before run_fluxscale or after run_speccombine? Or do it twice?    
 def run_sigmaclip():
     return
     
-def run_fluxscale()
+    
+def run_fluxscale():
     return
 
+
 def run_speccombine():
+    '''
+    For science reductions, combine all chip-split, flux-scaled spectra.
+    For std star reductions, do that and also re-create the individual gr-angle spectra.
+    '''
     return
+
 
 def run_snapshots():
     ''' 
-    Create an images folder and save snapshots of images/spectra after each reduction step.
-    These will be used by the Rutgers Supernova Database program when creating the 
-    webpage for each SN. And it's a quicker check on the outputs than manually opening each file.    
-    This should not be run as part of the reduction process since it can take a while.
+    Not part of the automated reduction process. Run by the user separately after the reduction is done.
+    Create an images folder with snapshots of outputs from each reduction stage. Combine the images into a summary (PDF) file.
+    The images can help the user troubleshoot the reduction process, and will be available on the Rutgers Supernova Database.
+    '''
+    return
+    
+
+def run_archivestds():
+    '''
+    Not part of the automated reduction process. Run by the user after verifying the std star spectra.
+    For std star reductions, copy the chip-combined individual gr-angle flux-calibrated spectra and sensfuncs to the 
+    pipeline's std star archive (global variable pipeStandardsPath). Rename the files to conform to a naming convention defined
+    to highlight the 3 important criteria for run_prepstandards(): (1) gr-angle (2) binning (3) most recent (date).
+    Flux-calibrated spectra: '%0.2fb%02istd'%(ga,binning)+date+'.fits' where date='yyyymmdd', binning='CCDSUM' without mid-space
+    Sensfuncs: '%0.2fb%02isen'%(ga,binning)+date+'.fits' where date='yyyymmdd', binning='CCDSUM' without mid-space
     '''
     return
 
