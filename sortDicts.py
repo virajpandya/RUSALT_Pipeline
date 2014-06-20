@@ -1,3 +1,4 @@
+
 '''
 >>> Rutgers SALT Supernova Spectral Reduction Pipeline <<<
 
@@ -47,8 +48,14 @@ def sort():
 	for n,s in enumerate(possiblestandards):
 		snew = s.split('.')
 		possiblestandards[n] = snew[0][1:].lower()
+	# this sorts pysalt arc identify files if present (specific name structure: arcxx.xxsolyyy.db)
+	for sol in glob('arc*.db'):
+		sol_angle = sol[3:8]
+		dicts.wavesols[sol_angle] = sol
+		print "*****Found and sorted "+sol+" for angle: "+sol_angle
 	# This loops through all the images and sorts them into one of the 4 dictionaries from above based on type and gr-angle.
 	for img in images:	
+		print "sorting: "+img
 		# if necessary, doing header error corrections
 		hdulist = pyfits.open(img,mode='update')
 		header = hdulist[0].header
@@ -65,12 +72,12 @@ def sort():
 		try: # checks if 'GAIN' keyword exists (SALTMOSAIC may not have transferred it)
 			if header.get('GAIN','') == '':
 				if header.get('GAINSET','') == 'FAINT' and header.get('ROSPEED','') == 'SLOW':
-					header.update('GAIN',2.146) # value from pysalt wiki documentation for this keyword-combo
-					print img+": Changed 'GAIN' to 2.146"
+					header.update('GAIN',2.443) # value from pysalt wiki documentation for this keyword-combo
+					print img+": Changed 'GAIN' to 2.443"
 		except:
 			if header.get('GAINSET','') == 'FAINT' and header.get('ROSPEED','') == 'SLOW':
-					header.update('GAIN',2.146) # value from pysalt wiki documentation for this keyword-combo
-					print img+": Changed 'GAIN' to 2.146"
+					header.update('GAIN',2.443) # value from pysalt wiki documentation for this keyword-combo
+					print img+": Changed 'GAIN' to 2.443"
 		header.update('AIRMASS',1.28) # standard AIRMASS for SALT (to prevent negative or high airmass for some images)
 		print img+": Changed 'AIRMASS' to 1.28"
 		hdulist.flush()
@@ -78,7 +85,7 @@ def sort():
 		# sorting into dictionaries
 		hdr = pyfits.getheader(img,0)
 		# this truncates the gr-angle so it only has 2 decimal digits (string format)
-		angle = hdr.get('GR-ANGLE','')  # since we are maintaining file structure with imcopy, most files should have GR-ANGLE preserved
+		angle = float(hdr.get('GR-ANGLE',''))
 		if angle != '':
 			angle = str('%.3f'%angle)
 			a = angle.split('.')
@@ -95,11 +102,7 @@ def sort():
 			imgclass = ''
 		# if non-pipeline-processed image, just check 'OBJECT'
 		if processed == [] and imgclass == '':
-			firstFour = img[0:4] # first four letters of img
-			if firstFour == 'sens': # sensfunc file
-				sensAngle = img[4:9]
-				dicts.sensfiles[angle] = img
-			elif obj=='FLAT':
+			if obj=='FLAT':
 				temp = dicts.flats.get(angle,[])
 				temp.append(img)
 				dicts.flats[angle] = temp
@@ -133,6 +136,8 @@ def sort():
 					pipeHistory.updatePipeKeys(inputname=img,imagetype='science',procChar='') # for future auto-sorting
 					dicts.sciences[angle] = img
 					print img+' sorted as science with angle: '+angle
+		elif processed == ['g'] and imgclass == 'sensfunc': # add to sensfiles, will be auto-added based on std/sci-dsp header too
+			dicts.sensfiles[angle] = img 
 		elif processed == [] and imgclass != '': # mbxgp processed before so 'RUIMGTYP' key present
 			if imgclass == 'science':
 				dicts.sciences[angle] = img
@@ -187,8 +192,12 @@ def sort():
 				dicts.bwmstandards[angle] = img
 			elif 'd' in processed and imgclass == 'science': # dispersion-corrected science
 				dicts.dispsciences[angle] = img
+				dicts.sensfiles[angle] = hdr.get('RUSENS','')
+				dicts.bwmsciences[angle] = hdr.get('BPM','')
 			elif 'd' in processed and imgclass == 'standard': # dispersion-corrected standard
 				dicts.dispstandards[angle] = img
+				dicts.sensfiles[angle] = hdr.get('RUSENS','')
+				dicts.bwmstandards[angle] = hdr.get('BPM','')
 			elif 'j' in processed and imgclass == 'science': # apsum-extracted science
 				dicts.apsumsciences[angle] = img
 			elif 'e' in processed and imgclass == 'science': # extracted science
@@ -243,3 +252,12 @@ def sort():
 	print dicts.standards
 	print 'The original arc image filenames are:'
 	print dicts.arcs
+	# Temporary 2014-03-18, in future, print all non-empty dictionaries
+	print 'Dispersion-corrected standards:'
+	print dicts.dispstandards
+	print 'Sensitivity function files:'
+	print dicts.sensfiles
+	if dicts.wavesols != {}:
+		print "Existing wavelength solutions for PySALT: "
+		print dicts.wavesols
+

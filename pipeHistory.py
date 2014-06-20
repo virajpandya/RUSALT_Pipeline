@@ -1,3 +1,4 @@
+
 '''
 >>> Rutgers SALT Supernova Spectral Reduction Pipeline <<<
 
@@ -181,3 +182,4 @@ def updatePipeKeys(inputname,imagetype,procChar):
 			hdrkey['RUPIPE'] = proc
 	hdukey.flush()
 	hdukey.close()
+

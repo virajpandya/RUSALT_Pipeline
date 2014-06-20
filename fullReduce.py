@@ -1,3 +1,4 @@
+
 '''
 >>> Rutgers SALT Supernova Spectral Reduction Pipeline <<<
 
@@ -65,10 +66,11 @@ def run():
 	print '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'
 	tasks.specidentifyarcs()
 	# use wavelength solution files to wavelength-calibrate the 2D arc images
-	print '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'
-	print 'Applying wavelength solution to each 2D flat-fielded arc image using: wavecalarc()'
-	print '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'
-	tasks.wavecalarc()
+	# 2014-03-18: rectification and verification is now done in specidentifyarcs()
+	#print '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'
+	#print 'Applying wavelength solution to each 2D flat-fielded arc image using: wavecalarc()'
+	#print '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'
+	#tasks.wavecalarc()
 	# use wavelength solution files to wavelength-calibrate the 2D science images
 	print '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'
 	print 'Applying wavelength solution to each 2D flat-fielded science image using: wavecalsci()'
@@ -175,3 +177,4 @@ def run():
 	print 'Correcting telluric features in spectra: telluricCorrect()'
 	print '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'
 	tasks.telluricCorrect()
+
