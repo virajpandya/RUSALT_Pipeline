@@ -24,6 +24,7 @@ standardsPath = '/usr/local/astro64/iraf/extern/pysalt/data/standards/spectrosco
 lineListPath = '/usr/local/astro64/iraf/extern/pysalt/data/linelists/'
 pipeStandardsPath = '/usr/local/astro64/rusaltsn/standards/'
 skyLineSpectrum = '/Users/vgpandya/mastersky.fits' 
+pysaltpath = '/usr/local/astro64/iraf/extern/pysalt'
 
 '''
 There are two chip gaps, each spanning a range of columns (pixels). To avoid using data near the chip gap edges (primarily
@@ -158,8 +159,8 @@ def run_pysalt(fs=None):
     for f in fs: shutil.copy(f,'raw/')
     for f in fs: shutil.move(f, 'work/')
     os.chdir('work')
-    #Run each of the pysalt pipeline steps deleting temporary files as we go
     
+    #Run each of the pysalt pipeline steps deleting temporary files as we go
     #saltprepare
     iraf.unlearn(iraf.saltprepare)
     #Currently, there is not a bad pixel mask provided by SALT so we don't create one here.
@@ -169,7 +170,7 @@ def run_pysalt(fs=None):
     #saltgain
     iraf.unlearn(iraf.saltgain)
     #Multiply by the gain so that everything is in electrons.
-    iraf.saltgain(images='pP*.fits',gaindb = os.environ['PYSALT']+'/data/rss/RSSamps.dat', mult=True, usedb=True,mode='h')
+    iraf.saltgain(images='pP*.fits',gaindb = pysaltpath+'/data/rss/RSSamps.dat', mult=True, usedb=True,mode='h')
     for f in glob('pP*.fits'): os.remove(f)
     
     #write a keyword in the header keyword gain = 1 in each amplifier
@@ -179,7 +180,7 @@ def run_pysalt(fs=None):
 
     #saltxtalk
     iraf.unlearn(iraf.saltxtalk)
-    iraf.saltxtalk(images = 'gpP*.fits',clobber=True, usedb=True, xtalkfile = os.environ['PYSALT']+'/data/rss/RSSxtalk.dat',mode='h')
+    iraf.saltxtalk(images = 'gpP*.fits',clobber=True, usedb=True, xtalkfile = pysaltpath+'/data/rss/RSSxtalk.dat',mode='h')
     for f in glob('gpP*.fits'): os.remove(f)
     
     #saltbias
@@ -188,12 +189,12 @@ def run_pysalt(fs=None):
     for f in glob('xgpP*.fits'): os.remove(f)
     
     #Put all of the newly created files into the pysalt directory
-    os.mkdir('pysalt')
-    for f in glob('bxgP*.fits'): shutil.move(f,'pysalt')
+    if not os.path.exists('pysalt'): os.mkdir('pysalt')
+    for f in glob('bxgpP*.fits'): shutil.move(f,'pysalt')
     os.chdir('..')
+
     #Hold off on the the mosaic step for now. We want to do some processing on the individual chips
-    
-    return fs
+
 
 def get_ims(fs,imtype):
     typekeys ={'sci':'OBJECT','arc':'ARC','flat':'FLAT'}
@@ -205,6 +206,14 @@ def get_ims(fs,imtype):
             grangles.append(pyfits.getval(f,'GR-ANGLE'))
     return np.array(ims),np.array(grangles)
 
+def get_scis_and_arcs(fs):
+    scifs, scigas = get_ims(fs,'sci')
+    arcfs, arcgas = get_ims(fs,'arc')
+
+    ims = np.append(scifs,arcfs)
+    gas = np.append(scigas, arcgas)
+    return ims,gas
+    
 def run_makeflats(fs=None):
     #Note the list of files need to not include any paths relative to the work directory
     #Maybe not the greatest convention, but we can update this later
@@ -213,16 +222,15 @@ def run_makeflats(fs=None):
         fs = glob('pysalt/bxgp*.fits')
     if len(fs)==0:
         print "WARNING: No flat-fields to combine and normalize."
-        #Maybe we need to change folders to fail gracefully, but I don't have this here for now.
+        #Fail gracefully by going up a directory
+        os.chdir('..')
         return
     #make a flats directory
-    os.mkdir('flats')
+    if not os.path.exists('flats'): os.mkdir('flats')
     
-    #Figure out which images are flats
-    #Figure out which grating angles were used
+    #Figure out which images are flats and which grating angles were used
     allflats, grangles = get_ims(fs,'flat')
     
-    os.mkdir() 
     #For each grating angle
     for ga in np.unique(grangles):
         #grab the flats for this gr angle
@@ -230,24 +238,25 @@ def run_makeflats(fs=None):
         
         #For each chip
         for c in range(1,7):
-            #run imcombine with average and crreject, weighted by exposure time
+            #run imcombine with average and sigclip, weighted by exposure time
             flatlist = ''
             for f in flats: 
                 flatlist += '%s[%i],'%(f,c)
-                #Add the exptime keyword to extension
+                #Add the exptime keyword to each extension
                 pyfits.setval(f,'EXPTIME',ext = c, value = pyfits.getval(f,'EXPTIME'))
             
             #set the output combined file name
             combineoutname = 'flats/flt%0.2fcomc%i.fits'%(ga,c)
             if os.path.exists(combineoutname): os.remove(combineoutname)
+            #initialize the iraf command
             iraf.unlearn(iraf.imcombine); iraf.flpr()
             
             #don't forget to remove the last comma in the filelist
             iraf.imcombine(input = flatlist[:-1], output = combineoutname, combine='average',
                            reject='sigclip',lsigma = 3.0, hsigma = 3.0,
                            weight='exposure',expname='EXPTIME')
-                      
-            #Don't know if this is going to help, but it might.
+            
+            pyfits.setval(combineoutname,'DISPAXIS',value=1)
             #We want to make an illumination correction file before running response:
             illumoutname = 'flats/flt%0.2fillc%i.fits'%(ga,c) 
             iraf.unlearn(iraf.illumination); iraf.flpr()
@@ -267,11 +276,13 @@ def run_makeflats(fs=None):
             #close the illumination file because we don't need it anymore
             illumhdu.close()
             
-            flat1dfname = 'flats/flt%0.2f1dmc%i.fits'%(ga,c)
+            #File stage m1d for median 1-D
+            flat1dfname = 'flats/flt%0.2fm1dc%i.fits'%(ga,c)
             tofits(flat1dfname,flat1d, hdr=combinehdu[0].header.copy())
             
             #run response
-            resp1dfname = 'flats/flt%0.2f1drc%i.fits'%(ga,c)
+            #r1d = response1d
+            resp1dfname = 'flats/flt%0.2fr1dc%i.fits'%(ga,c)
             iraf.response(flat1dfname,flat1dfname, resp1dfname ,order = 31, 
                           interactive=False,  naverage=-5, low_reject=3.0,high_reject=3.0,
                           niterate=5, mode='hl'  )
@@ -281,7 +292,7 @@ def run_makeflats(fs=None):
             resp1dhdu.close()
             
             #After response divide out the response function
-            #normailze the 1d resp to its median
+            #normalize the 1d resp to its median
             resp1d/= np.median(resp1d)
             
             #Chuck any outliers
@@ -289,7 +300,7 @@ def run_makeflats(fs=None):
             resp1d[abs(resp1d - 1.0) > 5.0 * flatsig] = 1.0
             resp = flat1d/resp1d
             
-            resp2dfname = 'flats/flt%0.2resc%i.fits'%(ga,c)
+            resp2dfname = 'flats/flt%0.2fresc%i.fits'%(ga,c)
             resp2d = combinehdu[0].data.copy()/resp
             tofits(resp2dfname,resp2d,hdr = combinehdu[0].header.copy())
             combinehdu.close()
@@ -302,16 +313,19 @@ def run_makeflats(fs=None):
             #Reset any pixels in the flat field correction< 0.1
             #We could flag bad pixels here if we want, but not right now
             flathdu = pyfits.open(resp2dfname,mode='update')
-            flathdu[0].data[resp2dfname[0].data <= 0.1] = 0.0
+            flathdu[0].data[flathdu[0].data <= 0.1] = 0.0
             flathdu.flush()
             flathdu.close()
     #Step back up to the top directory
     os.chdir('..')
     
 def run_flatten(fs = None):
+    os.chdir('work')
     if fs is None: fs = glob('pysalt/bxgpP*.fits')
     if len(fs)==0:
         print "WARNING: No images to flat-field."
+        #Change directories to fail more gracefully
+        os.chdir('..')
         return
     if not os.path.exists('flts'): os.mkdir('flts')
     #Make sure there are science images or arcs and what grating angles were used
@@ -329,7 +343,9 @@ def run_flatten(fs = None):
             #open the corresponding response file
             resphdu = pyfits.open('flats/flt%0.2fresc%i.fits'%(ga,c))
             #divide out the illumination correction and the flatfield, make sure divzero = 0.0
-            thishdu[c].data /= resphdu.copy()
+            thishdu[c].data /= resphdu[0].data.copy()
+            #replace the infinities with 0.0
+            thishdu[c].data[np.isinf(thishdu[c].data)]=0.0
             resphdu.close()
             
         #save the updated file
@@ -338,51 +354,58 @@ def run_flatten(fs = None):
         #get the image number
         #by salt naming convention, these should be the last 3 characters before the '.fits'
         imnum = f[-8:-5]
-        outname = 'flts/'+typestr+'%0.2fflt%03i.fits'%(ga,imnum)
+        outname = 'flts/'+typestr+'%0.2fflt%03i.fits'%(float(ga),int(imnum))
         thishdu.writeto(outname)
         thishdu.close()
+    
+    os.chdir('..')
         
 def run_mosaic(fs=None):
+    
+    os.chdir('work')
     # If the file list is not given, grab the default files
     if fs is None: fs = glob('flts/*.fits') 
     #Abort if there are no files
     if len(fs)==0:
         print "WARNING: No flat-fielded images to mosaic."
+        os.chdir('..')
         return
     
-    #Get the images to work with
-    scifs, scigas = get_ims(fs,'sci')
-    arcfs, arcgas = get_ims(fs,'arc')
-    ims = np.append(scifs,arcfs)
-    gas = np.append(scigas, arcgas)
-    
+
     if not os.path.exists('mos'):os.mkdir('mos')
+    
+    #Get the images to work with
+    ims,gas = get_scis_and_arcs(fs)
+
     for i,f in enumerate(ims): 
         ga = gas[i]
         fname =  f.split('/')[1]
         typestr = fname[:3]
-        #by our naming convention, these should be the last 3 characters before the '.fits'
+        #by our naming convention, imnum should be the last 3 characters before the '.fits'
         imnum = fname[-8:-5]
-        outname = 'mos/'+typestr+'%0.2fmos%03i.fits'%(ga,imnum)
+        outname = 'mos/'+typestr+'%0.2fmos%03i.fits'%(float(ga),int(imnum))
         iraf.unlearn(iraf.saltmosaic) ; iraf.flpr()# prepare to run saltmosaic
-        iraf.saltmosaic(images=f,outimages=outname,outpref='',clobber=True,mode='h') 
-
+        iraf.saltmosaic(images=f,outimages=outname,outpref='',
+                        geomfile = pysaltpath+'/rdata/rss/RSSgeom.dat',clobber=True,mode='h') 
+    os.chdir('..')
 
 def run_identify2d(fs=None):
+    os.chdir('work')
     if fs is None: fs = glob('mos/arc*mos*.fits') 
     if len(fs)==0:
         print "WARNING: No mosaiced arcs for PySALT's (2D) specidentify."
+        #Change directories to fail gracefully
+        os.chdir('..')
         return
     arcfs,arcgas = get_ims(fs,'arc')
     if not os.path.exists('id2'):os.mkdir('id2')
     
-    lampfiles = {'Th Ar':'ThAr.salt','Xe':'Xe.txt', 'Ne':'NeAr.salt', 'Cu Ar':'CuAr.txt',
-                 'Ar':'Argon_hires.salt', 'Hg Ar':'HgAr.txt' }
+    lampfiles = {'Th Ar':'ThAr.salt','Xe':'Xe.salt', 'Ne':'NeAr.salt', 'Cu Ar':'CuAr.salt',
+                 'Ar':'Argon_hires.salt', 'Hg Ar':'HgAr.salt' }
     for i,f in enumerate(arcfs):
         ga = arcgas[i]
         # find lamp and corresponding linelist
         lamp = pyfits.getval(f,'LAMPID')
-        print 'the lamp is '+lamp+' for '+f 
         # linelistpath is a global variable defined in beginning, path to where the line lists are.
         try: lamplines = lineListPath+lampfiles[lamp]
         except KeyWARNING:
@@ -392,11 +415,11 @@ def run_identify2d(fs=None):
         #img num should be right before the .fits
         imgnum = f[-8:-5]
         # run pysalt specidentify
-        idfile = 'id2/arc%0.2fid2%03i'%(ga,imgnum)+'.db' 
+        idfile = 'id2/arc%0.2fid2%03i'%(float(ga),int(imgnum))+'.db' 
         iraf.unlearn(iraf.specidentify); iraf.flpr()
         iraf.specidentify(images=f,linelist=lamplines,outfile=idfile,guesstype='rss',automethod='Matchlines',
-                          function='legendre',order=3,rstep=100,rstart='middlerow',mdiff=5,inter='yes',
-                          startext=1,clobber='yes',verbose='yes')
+                          startext=1,clobber='yes',verbose='yes',mode = 'hl',logfile = 'salt.log')
+        os.chdir('..')
 
 def run_rectify(fs=None):
     if fs is None: fs = glob('id2/arc*id2*.db') 
@@ -701,8 +724,7 @@ def run_checksky(fs=None):
     
     ##### Here's my general code to cross-correlate and find the shift.
     ##### IMPORTANT: figure out what to use in place of mastersky.fits to cross-correlate blue bright lines.
-    
-    ''' on hold since i wanted to finish up a few of the subsequent tasks -VP '''
+    #''' on hold since i wanted to finish up a few of the subsequent tasks -VP '''
     
     if fs is None: fs = glob('ext/sci*ext*.fits')
     if len(fs)==0:
@@ -724,7 +746,6 @@ def run_checksky(fs=None):
         
         # Similarly for skyLineSpectrum, which is a global variable for the path to the reference sky spectrum
         hdu = pyfits.open(skyLineSpectrum)
-        
         # Need to resample skyLineSpectrum to the same # of data points as the science spectrum (for proper x-corr)
     
     return
@@ -901,7 +922,7 @@ def run_prepstandards(fs=None):
         pyfits.setval(f,'RUSTD',ext=0,value=beststd[-24:]) # beststd contains path => reverse indices
         pyfits.setval(f,'RUSENS',ext=0,value=bestsen[-24:])
     # Now call run_split1d() on beststd and bestsen (will just append c# before .fits for each chip file)
-    ims = append(beststds,bestsens)
+    ims = np.append(beststds,bestsens)
     run_split1d(fs=ims) # should ideally add 'RUSENS' and 'RUSTD' header keywords to chip-split science spectra for record-keeping
 
 
@@ -1084,8 +1105,7 @@ def run_pytelluric(fs=None):
 # Should we put this before run_fluxscale or after run_speccombine? Or do it twice?    
 def run_sigmaclip():
     return
-    
-    
+
 def run_fluxscale():
     return
 
