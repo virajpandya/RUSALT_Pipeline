@@ -36,228 +36,224 @@ import pyrafCalls # Contains the functions which set the parameters for and call
 import pipeHistory # Mainly used to access and modify pipeline processed header keywords in FITS images.
 
 def sort():
-	# This returns a list of all the fits filenames in the directory.
-	images = glob('*.fits')
-	# This creates a list of the "default" standard stars in the relevant pysalt subdirectory:
-	# /usr/local/astro64/iraf/extern/pysalt/data/standards/spectroscopic/
-	cwd = os.getcwd()
-	os.chdir(params.standardsPath)
-	possiblestandards = glob('m*.dat')
-	os.chdir(cwd)
-	# this gets rid of the 'm' in the beginning and '.dat' at the end so comparisons can be made with 'OBJECT'
-	for n,s in enumerate(possiblestandards):
-		snew = s.split('.')
-		possiblestandards[n] = snew[0][1:].lower()
-	# this sorts pysalt arc identify files if present (specific name structure: arcxx.xxsolyyy.db)
-	for sol in glob('arc*.db'):
-		sol_angle = sol[3:8]
-		dicts.wavesols[sol_angle] = sol
-		print "*****Found and sorted "+sol+" for angle: "+sol_angle
-	# This loops through all the images and sorts them into one of the 4 dictionaries from above based on type and gr-angle.
-	for img in images:	
-		print "sorting: "+img
-		# if necessary, doing header error corrections
-		hdulist = pyfits.open(img,mode='update')
-		header = hdulist[0].header
-		# Skip img if it is a SALTICAM (CCD) acquisition image.
-		if header.get('INSTRUME','') == 'SALTICAM' or header.get('OBSMODE','') == 'IMAGING' or img[0:6] == 'mbxgpS':
-			continue
-		try: # checks if 'MASKTYP' keyword is set to 'LONGSLIT'
-			if header['MASKTYP'] != 'LONGSLIT':
-				header.update('MASKTYP','LONGSLIT')
-				print img+": Changed 'MASKTYP' to 'LONGSLIT'"
-		except:
-			header.update('MASKTYP','LONGSLIT')
-			print img+": Changed 'MASKTYP' to 'LONGSLIT'"
-		try: # checks if 'GAIN' keyword exists (SALTMOSAIC may not have transferred it)
-			if header.get('GAIN','') == '':
-				if header.get('GAINSET','') == 'FAINT' and header.get('ROSPEED','') == 'SLOW':
-					header.update('GAIN',2.443) # value from pysalt wiki documentation for this keyword-combo
-					print img+": Changed 'GAIN' to 2.443"
-		except:
-			if header.get('GAINSET','') == 'FAINT' and header.get('ROSPEED','') == 'SLOW':
-					header.update('GAIN',2.443) # value from pysalt wiki documentation for this keyword-combo
-					print img+": Changed 'GAIN' to 2.443"
-		header.update('AIRMASS',1.28) # standard AIRMASS for SALT (to prevent negative or high airmass for some images)
-		print img+": Changed 'AIRMASS' to 1.28"
-		hdulist.flush()
-		hdulist.close()
-		# sorting into dictionaries
-		hdr = pyfits.getheader(img,0)
-		# this truncates the gr-angle so it only has 2 decimal digits (string format)
-		angle = float(hdr.get('GR-ANGLE',''))
-		if angle != '':
-			angle = str('%.3f'%angle)
-			a = angle.split('.')
-			a[1] = a[1][:2]
-			angle = '.'.join(a)
-		obj = hdr.get('OBJECT','') # bad pixel masks for example will not have 'OBJECT'
-		try: # in case 'RUPIPE' or 'RUIMGTYP' keywords don't exist (image not pipeline-processed)
-			processed = list(hdr['RUPIPE']) # returns character list instead of the string sequence
-		except:
-			processed = []
-		try:
-			imgclass = hdr['RUIMGTYP']
-		except: # possible for mbxgpP raw science or std images with only 'RUIMGTYP' keyword set
-			imgclass = ''
-		# if non-pipeline-processed image, just check 'OBJECT'
-		if processed == [] and imgclass == '':
-			if obj=='FLAT':
-				temp = dicts.flats.get(angle,[])
-				temp.append(img)
-				dicts.flats[angle] = temp
-				print img+' sorted as flat with angle: '+angle
-			elif obj=='ARC':
-				dicts.arcs[angle] = img
-				print img+' sorted as arc with angle: '+angle
-			# check if obj is in list of possible SALT standard stars (lowercase comparisons to ignore case)
-			elif obj.lower() in possiblestandards:
-				temp = dicts.standards.get(angle,[])
-				temp.append(img)
-				dicts.standards[angle] = temp
-				print img+' sorted as standard star with angle: '+angle
-			# if obj is neither flat nor arc nor in possiblestandards, print obj and ask user to classify manually:
-			# as standard (short name) or science (long, weird name maybe with 'RU' in it -- obvious)
-			else:
-				print 'Could not automatically classify '+img+' as a FLAT, ARC, or SALT standard star'
-				print 'The object name is: '+obj
-				print 'Please enter 0 if this name resembles an abbreviation for a standard star.'
-				print 'Please enter 1 if this name is rather long and resembles a science image.'
-				while True:
-					answer = raw_input("Enter 0 or 1 (see instructions above): ")
-					if answer == '0' or answer == '1':
-						break
-					else:
-						print "Invalid input. You must enter either 0 or 1."
-				if answer == '0':
-					dicts.standards[angle] = img
-					print img+' sorted as standard star with angle: '+angle
-				elif answer == '1':
-					pipeHistory.updatePipeKeys(inputname=img,imagetype='science',procChar='') # for future auto-sorting
-					dicts.sciences[angle] = img
-					print img+' sorted as science with angle: '+angle
-		elif processed == ['g'] and imgclass == 'sensfunc': # add to sensfiles, will be auto-added based on std/sci-dsp header too
-			dicts.sensfiles[angle] = img 
-		elif processed == [] and imgclass != '': # mbxgp processed before so 'RUIMGTYP' key present
-			if imgclass == 'science':
-				dicts.sciences[angle] = img
-				print img+' sorted as science with angle: '+angle
-			elif imgclass == 'standard':
-				dicts.standards[angle] = img
-				print img+' sorted as standard star with angle: '+angle
-			elif imgclass == 'arc':
-				dicts.arcs[angle] = img
-				print img+' sorted as arc with angle: '+angle
-			elif imgclass == 'flat':
-				dicts.fkat[angle] = img
-				print img+' sorted as flat with angle: '+angle
-		else: # else, sort into global dictionaries based on processed and imgclass
-			if 't' in processed and imgclass == 'science': # telluric-corrected science spectrum
-				dicts.combinedspectra['tel'] = img
-			elif 'k' in processed and imgclass == 'science': # cleaned combined science spectrum
-				dicts.combinedspectra['clnsci'] = img
-			elif 'k' in processed and imgclass == 'standard': # cleaned combined std star spectrum
-				dicts.combinedspectra['clnstd'] = img
-			elif 'x' in processed and imgclass == 'science': # combined sigma spectrum
-				dicts.combinedspectra['sig'] = img
-			elif 'w' in processed and imgclass == 'science': # combined sky spectrum
-				dicts.combinedspectra['sky'] = img
-			elif 'u' in processed and imgclass == 'science': # combined-disp science spectrum
-				dicts.combinedspectra['dsp'] = img
-			elif 'v' in processed and imgclass == 'standard': # combined sky spectrum
-				dicts.combinedspectra['std'] = img
-			elif 'v' in processed and imgclass == 'science': # combined-flux science spectrum
-				dicts.combinedspectra['flx'] = img
-			elif 'c' in processed and imgclass == 'science': # count-scaled science spectrum
-				dicts.scaleddispsciences[angle] = img
-			elif 'y' in processed and imgclass == 'science': # sky spectrum
-				dicts.skysciences[angle] = img
-			elif 'z' in processed and imgclass == 'science': # sigma spectrum
-				dicts.sigmasciences[angle] = img
-			elif 'n' in processed and imgclass == 'standard': # scaled standard star spectrum
-				dicts.scaledstandards[angle] = img
-			elif 'n' in processed and imgclass == 'science': # scaled science spectrum
-				dicts.scaledfluxsciences[angle] = img
-			elif 'g' in processed and imgclass == 'standard': # flux-calibrated standard star spectrum
-				dicts.fluxstandards[angle] = img
-				dicts.stdfiles[angle] = hdr.get('RUSTD','')
-				dicts.sensfiles[angle] = hdr.get('RUSENS','')
-			elif 'g' in processed and imgclass == 'science': # flux-calibrated science spectrum
-				dicts.fluxsciences[angle] = img
-				dicts.stdfiles[angle] = hdr.get('RUSTD','')
-				dicts.sensfiles[angle] = hdr.get('RUSENS','')
-			elif 'o' in processed and imgclass == 'bwm_sci': # bad wavelength mask for science
-				dicts.bwmsciences[angle] = img
-			elif 'o' in processed and imgclass == 'bwm_std': # bad wavelength mask for standard
-				dicts.bwmstandards[angle] = img
-			elif 'd' in processed and imgclass == 'science': # dispersion-corrected science
-				dicts.dispsciences[angle] = img
-				dicts.sensfiles[angle] = hdr.get('RUSENS','')
-				dicts.bwmsciences[angle] = hdr.get('BPM','')
-			elif 'd' in processed and imgclass == 'standard': # dispersion-corrected standard
-				dicts.dispstandards[angle] = img
-				dicts.sensfiles[angle] = hdr.get('RUSENS','')
-				dicts.bwmstandards[angle] = hdr.get('BPM','')
-			elif 'j' in processed and imgclass == 'science': # apsum-extracted science
-				dicts.apsumsciences[angle] = img
-			elif 'e' in processed and imgclass == 'science': # extracted science
-				dicts.extractedsciences[angle] = img
-			elif 'e' in processed and imgclass == 'standard': # extracted standard
-				dicts.extractedstandards[angle] = img
-			elif 'e' in processed and imgclass == 'arc_std': # extracted arc_std
-				dicts.extractedarcs_std[angle] = img
-			elif 'e' in processed and imgclass == 'arc_sci': # extracted arc_sci
-				dicts.extractedarcs_sci[angle] = img
-			elif 'b' in processed and imgclass == 'science': # background-subtracted science
-				dicts.backgroundsciences[angle] = img
-			elif 'r' in processed and imgclass == 'arc': # rectified arc
-				dicts.wavearcs[angle] = img
-			elif 'r' in processed and imgclass == 'science': # rectified science
-				dicts.wavesciences[angle] = img
-			elif 'r' in processed and imgclass == 'standard': # rectified standard
-				dicts.wavestandards[angle] = img
-			elif 'a' in processed and imgclass == 'arc': # flatarc that had specidentify run on it
-				dicts.wavesols[angle] = img
-				# since 'a' will always be with 'f', add img to flatarcs[angle] as well
-				dicts.flatarcs[angle] = img
-			elif 'l' in processed and imgclass == 'science': # lacosmicx-corrected sciences
-				dicts.laxsciences[angle] = img
-			elif 'l' in processed and imgclass == 'bpm_sci': # cosmic (ray) pixel mask from lacosmicx (for science)
-				dicts.bpmlaxsciences[angle] = img
-			elif 'o' in processed and imgclass == 'bpm_sci': # bad pixel mask for science
-				dicts.bpmsciences[angle] = img
-			elif 'o' in processed and imgclass == 'bpm_arc': # bad pixel mask for arc
-				dicts.bpmarcs[angle] = img
-			elif 'o' in processed and imgclass == 'bpm_std': # bad pixel mask for standard
-				dicts.bpmstandards[angle] = img		
-			elif 'f' in processed and imgclass == 'science': # flat-fielded science
-				dicts.flatsciences[angle] = img
-			elif 'f' in processed and imgclass == 'arc': # flat-fielded arc
-				# this will actually never run because 'a' will always be in RUPIPE with 'f'
-				# flat-fielded arc is added to flatarcs[angle] when the 'a' processing (wavesols) is done
-				dicts.flatarcs[angle] = img
-			elif 'f' in processed and imgclass == 'standard': # flat-fielded standard
-				dicts.flatstandards[angle] = img	
-			elif 'n' in processed and imgclass == 'flat': # normalized flat
-				dicts.normflats[angle] = img
-			elif 'c' in processed and imgclass == 'flat': # combined flat
-				dicts.combflats[angle] = img
-			
-	# printing initial global dictionaries
-	print 'The original flat image filenames are:'
-	print dicts.flats
-	print 'The original science image filenames are:'
-	print dicts.sciences
-	print 'The original standard star image filenames are:'
-	print dicts.standards
-	print 'The original arc image filenames are:'
-	print dicts.arcs
-	# Temporary 2014-03-18, in future, print all non-empty dictionaries
-	print 'Dispersion-corrected standards:'
-	print dicts.dispstandards
-	print 'Sensitivity function files:'
-	print dicts.sensfiles
-	if dicts.wavesols != {}:
-		print "Existing wavelength solutions for PySALT: "
-		print dicts.wavesols
+    # This returns a list of all the fits filenames in the directory.
+    images = glob('*.fits')
+    # This creates a list of the "default" standard stars in the relevant pysalt subdirectory:
+    # /usr/local/astro64/iraf/extern/pysalt/data/standards/spectroscopic/
+    cwd = os.getcwd()
+    os.chdir(params.standardsPath)
+    possiblestandards = glob('m*.dat')
+    os.chdir(cwd)
+    # this gets rid of the 'm' in the beginning and '.dat' at the end so comparisons can be made with 'OBJECT'
+    for n,s in enumerate(possiblestandards):
+        snew = s.split('.')
+        possiblestandards[n] = snew[0][1:].lower()
+    # this sorts pysalt arc identify files if present (specific name structure: arcxx.xxsolyyy.db)
+    for sol in glob('arc*.db'):
+        sol_angle = sol[3:8]
+        dicts.wavesols[sol_angle] = sol
+        print "*****Found and sorted "+sol+" for angle: "+sol_angle
+    # This loops through all the images and sorts them into one of the 4 dictionaries from above based on type and gr-angle.
+    for img in images:  
+        print "sorting: "+img
+        # if necessary, doing header error corrections
+        hdulist = pyfits.open(img,mode='update')
+        header = hdulist[0].header
+        # Skip img if it is a SALTICAM (CCD) acquisition image.
+        if header.get('INSTRUME','') == 'SALTICAM' or header.get('OBSMODE','') == 'IMAGING' or img[0:6] == 'mbxgpS':
+            continue
+        try: # checks if 'MASKTYP' keyword is set to 'LONGSLIT'
+            if header['MASKTYP'] != 'LONGSLIT':
+                header.update('MASKTYP','LONGSLIT')
+                print img+": Changed 'MASKTYP' to 'LONGSLIT'"
+        except:
+            header.update('MASKTYP','LONGSLIT')
+            print img+": Changed 'MASKTYP' to 'LONGSLIT'"
+        try: # checks if 'GAIN' keyword exists (SALTMOSAIC may not have transferred it)
+            if header.get('GAIN','') == '':
+                if header.get('GAINSET','') == 'FAINT' and header.get('ROSPEED','') == 'SLOW':
+                    header.update('GAIN',2.443) # value from pysalt wiki documentation for this keyword-combo
+                    print img+": Changed 'GAIN' to 2.443"
+        except:
+            if header.get('GAINSET','') == 'FAINT' and header.get('ROSPEED','') == 'SLOW':
+                    header.update('GAIN',2.443) # value from pysalt wiki documentation for this keyword-combo
+                    print img+": Changed 'GAIN' to 2.443"
+        header.update('AIRMASS',1.28) # standard AIRMASS for SALT (to prevent negative or high airmass for some images)
+        print img+": Changed 'AIRMASS' to 1.28"
+        hdulist.flush()
+        hdulist.close()
+        # sorting into dictionaries
+        hdr = pyfits.getheader(img,0)
+        # this truncates the gr-angle so it only has 2 decimal digits (string format)
+        angle = float(hdr.get('GR-ANGLE',''))
+        if angle != '':
+            angle = str('%.3f'%angle)
+            a = angle.split('.')
+            a[1] = a[1][:2]
+            angle = '.'.join(a)
+        obj = hdr.get('OBJECT','') # bad pixel masks for example will not have 'OBJECT'
+        try: # in case 'RUPIPE' or 'RUIMGTYP' keywords don't exist (image not pipeline-processed)
+            processed = list(hdr['RUPIPE']) # returns character list instead of the string sequence
+        except:
+            processed = []
+        try:
+            imgclass = hdr['RUIMGTYP']
+        except: # possible for mbxgpP raw science or std images with only 'RUIMGTYP' keyword set
+            imgclass = ''
+        # if non-pipeline-processed image, just check 'OBJECT'
+        if processed == [] and imgclass == '':
+            if obj=='FLAT':
+                temp = dicts.flats.get(angle,[])
+                temp.append(img)
+                dicts.flats[angle] = temp
+                print img+' sorted as flat with angle: '+angle
+            elif obj=='ARC':
+                dicts.arcs[angle] = img
+                print img+' sorted as arc with angle: '+angle
+            # check if obj is in list of possible SALT standard stars (lowercase comparisons to ignore case)
+            elif obj.lower() in possiblestandards:
+                temp = dicts.standards.get(angle,[])
+                temp.append(img)
+                dicts.standards[angle] = temp
+                print img+' sorted as standard star with angle: '+angle
+            # if obj is neither flat nor arc nor in possiblestandards, print obj and ask user to classify manually:
+            # as standard (short name) or science (long, weird name maybe with 'RU' in it -- obvious)
+            else:
+                print 'Could not automatically classify '+img+' as a FLAT, ARC, or SALT standard star'
+                print 'The object name is: '+obj
+                print 'Please enter 0 if this name resembles an abbreviation for a standard star.'
+                print 'Please enter 1 if this name is rather long and resembles a science image.'
+                while True:
+                    answer = raw_input("Enter 0 or 1 (see instructions above): ")
+                    if answer == '0' or answer == '1':
+                        break
+                    else:
+                        print "Invalid input. You must enter either 0 or 1."
+                if answer == '0':
+                    dicts.standards[angle] = img
+                    print img+' sorted as standard star with angle: '+angle
+                elif answer == '1':
+                    pipeHistory.updatePipeKeys(inputname=img,imagetype='science',procChar='') # for future auto-sorting
+                    dicts.sciences[angle] = img
+                    print img+' sorted as science with angle: '+angle
+        elif processed == ['g'] and imgclass == 'sensfunc': # add to sensfiles, will be auto-added based on std/sci-dsp header too
+            dicts.sensfiles[angle] = img 
+        elif processed == [] and imgclass != '': # mbxgp processed before so 'RUIMGTYP' key present
+            if imgclass == 'science':
+                dicts.sciences[angle] = img
+                print img+' sorted as science with angle: '+angle
+            elif imgclass == 'standard':
+                dicts.standards[angle] = img
+                print img+' sorted as standard star with angle: '+angle
+            elif imgclass == 'arc':
+                dicts.arcs[angle] = img
+                print img+' sorted as arc with angle: '+angle
+            elif imgclass == 'flat':
+                dicts.fkat[angle] = img
+                print img+' sorted as flat with angle: '+angle
+        else: # else, sort into global dictionaries based on processed and imgclass
+            if 't' in processed and imgclass == 'science': # telluric-corrected science spectrum
+                dicts.combinedspectra['tel'] = img
+            elif 'k' in processed and imgclass == 'science': # cleaned combined science spectrum
+                dicts.combinedspectra['clnsci'] = img
+            elif 'k' in processed and imgclass == 'standard': # cleaned combined std star spectrum
+                dicts.combinedspectra['clnstd'] = img
+            elif 'x' in processed and imgclass == 'science': # combined sigma spectrum
+                dicts.combinedspectra['sig'] = img
+            elif 'w' in processed and imgclass == 'science': # combined sky spectrum
+                dicts.combinedspectra['sky'] = img
+            elif 'u' in processed and imgclass == 'science': # combined-disp science spectrum
+                dicts.combinedspectra['dsp'] = img
+            elif 'v' in processed and imgclass == 'standard': # combined sky spectrum
+                dicts.combinedspectra['std'] = img
+            elif 'v' in processed and imgclass == 'science': # combined-flux science spectrum
+                dicts.combinedspectra['flx'] = img
+            elif 'c' in processed and imgclass == 'science': # count-scaled science spectrum
+                dicts.scaleddispsciences[angle] = img
+            elif 'y' in processed and imgclass == 'science': # sky spectrum
+                dicts.skysciences[angle] = img
+            elif 'z' in processed and imgclass == 'science': # sigma spectrum
+                dicts.sigmasciences[angle] = img
+            elif 'n' in processed and imgclass == 'standard': # scaled standard star spectrum
+                dicts.scaledstandards[angle] = img
+            elif 'n' in processed and imgclass == 'science': # scaled science spectrum
+                dicts.scaledfluxsciences[angle] = img
+            elif 'g' in processed and imgclass == 'standard': # flux-calibrated standard star spectrum
+                dicts.fluxstandards[angle] = img
+                dicts.stdfiles[angle] = hdr.get('RUSTD','')
+                dicts.sensfiles[angle] = hdr.get('RUSENS','')
+            elif 'g' in processed and imgclass == 'science': # flux-calibrated science spectrum
+                dicts.fluxsciences[angle] = img
+                dicts.stdfiles[angle] = hdr.get('RUSTD','')
+                dicts.sensfiles[angle] = hdr.get('RUSENS','')
+            elif 'o' in processed and imgclass == 'bwm_sci': # bad wavelength mask for science
+                dicts.bwmsciences[angle] = img
+            elif 'o' in processed and imgclass == 'bwm_std': # bad wavelength mask for standard
+                dicts.bwmstandards[angle] = img
+            elif 'd' in processed and imgclass == 'science': # dispersion-corrected science
+                dicts.dispsciences[angle] = img
+            elif 'd' in processed and imgclass == 'standard': # dispersion-corrected standard
+                dicts.dispstandards[angle] = img
+            elif 'j' in processed and imgclass == 'science': # apsum-extracted science
+                dicts.apsumsciences[angle] = img
+            elif 'e' in processed and imgclass == 'science': # extracted science
+                dicts.extractedsciences[angle] = img
+            elif 'e' in processed and imgclass == 'standard': # extracted standard
+                dicts.extractedstandards[angle] = img
+            elif 'e' in processed and imgclass == 'arc_std': # extracted arc_std
+                dicts.extractedarcs_std[angle] = img
+            elif 'e' in processed and imgclass == 'arc_sci': # extracted arc_sci
+                dicts.extractedarcs_sci[angle] = img
+            elif 'b' in processed and imgclass == 'science': # background-subtracted science
+                dicts.backgroundsciences[angle] = img
+            elif 'r' in processed and imgclass == 'arc': # rectified arc
+                dicts.wavearcs[angle] = img
+            elif 'r' in processed and imgclass == 'science': # rectified science
+                dicts.wavesciences[angle] = img
+            elif 'r' in processed and imgclass == 'standard': # rectified standard
+                dicts.wavestandards[angle] = img
+            elif 'a' in processed and imgclass == 'arc': # flatarc that had specidentify run on it
+                dicts.wavesols[angle] = img
+                # since 'a' will always be with 'f', add img to flatarcs[angle] as well
+                dicts.flatarcs[angle] = img
+            elif 'l' in processed and imgclass == 'science': # lacosmicx-corrected sciences
+                dicts.laxsciences[angle] = img
+            elif 'l' in processed and imgclass == 'bpm_sci': # cosmic (ray) pixel mask from lacosmicx (for science)
+                dicts.bpmlaxsciences[angle] = img
+            elif 'o' in processed and imgclass == 'bpm_sci': # bad pixel mask for science
+                dicts.bpmsciences[angle] = img
+            elif 'o' in processed and imgclass == 'bpm_arc': # bad pixel mask for arc
+                dicts.bpmarcs[angle] = img
+            elif 'o' in processed and imgclass == 'bpm_std': # bad pixel mask for standard
+                dicts.bpmstandards[angle] = img     
+            elif 'f' in processed and imgclass == 'science': # flat-fielded science
+                dicts.flatsciences[angle] = img
+            elif 'f' in processed and imgclass == 'arc': # flat-fielded arc
+                # this will actually never run because 'a' will always be in RUPIPE with 'f'
+                # flat-fielded arc is added to flatarcs[angle] when the 'a' processing (wavesols) is done
+                dicts.flatarcs[angle] = img
+            elif 'f' in processed and imgclass == 'standard': # flat-fielded standard
+                dicts.flatstandards[angle] = img    
+            elif 'n' in processed and imgclass == 'flat': # normalized flat
+                dicts.normflats[angle] = img
+            elif 'c' in processed and imgclass == 'flat': # combined flat
+                dicts.combflats[angle] = img
+            
+    # printing initial global dictionaries
+    print 'The original flat image filenames are:'
+    print dicts.flats
+    print 'The original science image filenames are:'
+    print dicts.sciences
+    print 'The original standard star image filenames are:'
+    print dicts.standards
+    print 'The original arc image filenames are:'
+    print dicts.arcs
+    # Temporary 2014-03-18, in future, print all non-empty dictionaries
+    print 'Dispersion-corrected standards:'
+    print dicts.dispstandards
+    print 'Sensitivity function files:'
+    print dicts.sensfiles
+    if dicts.wavesols != {}:
+        print "Existing wavelength solutions for PySALT: "
+        print dicts.wavesols
 

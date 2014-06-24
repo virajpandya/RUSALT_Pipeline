@@ -810,16 +810,7 @@ def run():
                         os.remove(dicts.stdfiles[k])
                     except:
                         print "no std bandpass file for angle "+k
-                print "DELETE old standard star SENSFUNC files?"
-                while True: 
-                    moveforward = raw_input("Enter 0 to KEEP, or 1 to DELETE: ")
-                    if moveforward == '0' or moveforward == '1':
-                        break
-                    else:
-                        print "Invalid input: you must enter either 0 or 1."
-                if moveforward == 1:
-                    for k in dicts.sensfiles.keys():
-                        os.remove(dicts.sensfiles[k])
+                print "Keeping old std star SENSFUNC files."
             inputsciences = dicts.dispsciences
             inputstandards = dicts.dispstandards
             tasks.fluxcal(dspsci=inputsciences,dspstd=inputstandards,indiv=True)

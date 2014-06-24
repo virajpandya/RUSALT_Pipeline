@@ -56,16 +56,6 @@ def run_flatcombine(flatstocombine,combflatname,customRun=False):
     
     # turn python list (of string filenames) into a string sequence
     flatcombineseq = ','.join(flatstofeed)
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':
-            iraf.eparam(ccdred.flatcombine)
     
     ccdred.flatcombine(input=flatcombineseq,output=combflatname)
 
@@ -81,16 +71,7 @@ def run_response(combinedflat,normflatname,customRun=False):
     longslit.response.niterate=3
     longslit.response.grow=2
     longslit.response.interactive='no' # 2013-12-06: prevents bug in iraf that auto-inputs dispaxis=2
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':
-            iraf.eparam(longslit.response)
+
     # This makes sure that the DISPAXIS is set correctly (if 'DISPAXIS' keyword not in header)
     longslit.dispaxis = 1
     # This runs longslit.response (interactively for now)
@@ -116,17 +97,7 @@ def run_imcombine(imagestocombine,combimgname,commongain,customRun=False):
     immatch.imcombine.blank=0.0
     immatch.imcombine.expname='EXPTIME' # average EXPTIME added to output image header
     immatch.imcombine.imcmb='$I,AIRMASS' # copy airmass to one of the IMCMBnnn keywords in output header
-    
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':
-            iraf.eparam(immatch.imcombine)
+
         
     immatch.imcombine(input=imagestocombine,output=combimgname)
     
@@ -138,16 +109,7 @@ def run_imarith(dividend,divisor,quotient,customRun=False):
     imutil.imarith.divzero=0.0
     # appends [1] to end of dividend image since that's where data lives
     dividend = dividend+'[1]'
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':
-            iraf.eparam(imutil.imarith)
+
     # This runs imutil.imarith
     imutil.imarith(operand1=dividend,op='/',operand2=divisor,result=quotient)   
     
@@ -169,16 +131,7 @@ def run_specidentify(arcimage,lamplines,idfile,customRun=False):
     saltspec.specidentify.clobber='yes'
     saltspec.specidentify.logfile='pysalt.log'
     saltspec.specidentify.verbose='yes'
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':
-            iraf.eparam(saltspec.specidentify)
+
     # this runs saltspec.specidentify
     saltspec.specidentify(images=arcimage,linelist=lamplines,outfile=idfile)
 
@@ -195,22 +148,13 @@ def run_specrectify(input,output,idfile,customRun=False):
     saltspec.specrectify.inttype='interp'
     saltspec.specrectify.clobber='yes'
     saltspec.specrectify.verbose='yes'
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':
-            iraf.eparam(saltspec.specrectify)
+
     # this runs saltspec.specrectify
     saltspec.specrectify(images=input,outimages=output,solfile=idfile)
 
     
 # This function sets the parameters for the pyraf task twodspec.longslit.background and then runs it.
-def run_background(twodimage,newimage,faint='0',customRun=False):
+def run_background(twodimage,newimage,customRun=False):
     # this resets the parameters of longslit.background
     longslit.background.unlearn()
     longslit.background.axis='2'
@@ -224,19 +168,7 @@ def run_background(twodimage,newimage,faint='0',customRun=False):
     longslit.background.grow=0.0
     # since there are 2 extensions (0 and 1), need to specify data operation extension: 1
     twodimage = twodimage+'[1]'
-    # runs background interactively if user indicated that spectrum is faint
-    if faint=='1':
-        longslit.background.interactive='yes'
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':       
-            iraf.eparam(longslit.background)
+
     # This runs longslit.background
     longslit.background(input=twodimage,output=newimage)
     
@@ -300,15 +232,8 @@ def run_apall(twodimage,spectrum,saltgain,faint,customRun=False):
         apextract.apall.t_niterate = 3 
         apextract.apall.t_naverage = 1
         apextract.apall.t_grow = 1.0
-        # ask user to input a column where the SN is bright enough to start tracing from
-        while True:
-            colAnswer = raw_input("Please enter a column number where the SN is easily visible and can be traced: ")
-            if int(colAnswer) > 0 or int(colAnswer) < 3100: # temporarily hard-coded upper limit for 2x4 binning and PG0900 grating
-                break
-            else:
-                print "Invalid input: you must enter a column number between 0 and 3100."       
-        apextract.apall.line=int(colAnswer)
-    if faint=='4' or faint == '8': # faint supernova (continuum source) w/ local bkg subtraction
+        print "Use command ':line #' in apall to specify a column where the spectrum is easily visible."
+    if faint=='4' or faint == '7': # faint supernova (continuum source) w/ local bkg subtraction
         apextract.apall.nsum=-1000
         apextract.apall.background='fit' # to subtract local background for extended galaxy emission behind object
         apextract.apall.t_nsum=50
@@ -317,15 +242,8 @@ def run_apall(twodimage,spectrum,saltgain,faint,customRun=False):
         apextract.apall.t_niterate = 3 
         apextract.apall.t_naverage = 1
         apextract.apall.t_grow = 1.0
-        # ask user to input a column where the SN is bright enough to start tracing from
-        while True:
-            colAnswer = raw_input("Please enter a column number where the SN is easily visible and can be traced: ")
-            if int(colAnswer) > 0 or int(colAnswer) < 3100: # temporarily hard-coded upper limit for 2x4 binning and PG0900 grating
-                break
-            else:
-                print "Invalid input: you must enter a column number between 0 and 3100."       
-        apextract.apall.line=int(colAnswer)
-    if faint=='5' or faint == '7': # faint non-continuum source w/ local bkg subtraction (7 => use non-global-bkg rectified image)
+        print "Use command ':line #' in apall to specify a column where the spectrum is easily visible."
+    if faint=='5' or faint == '6': # faint non-continuum source w/ local bkg subtraction 
         apextract.apall.nsum=-3
         apextract.apall.background='fit' # to subtract local background for extended galaxy emission behind object
         apextract.apall.b_naverage = -3
@@ -335,31 +253,7 @@ def run_apall(twodimage,spectrum,saltgain,faint,customRun=False):
         apextract.apall.t_niterate = 3 
         apextract.apall.t_naverage = 1
         apextract.apall.t_grow = 1.0
-        # ask user to input a column where the SN is bright enough to start tracing from
-        while True:
-            colAnswer = raw_input("Please enter a column number where the SN is easily visible and can be traced: ")
-            if int(colAnswer) > 0 or int(colAnswer) < 3100: # temporarily hard-coded upper limit for 2x4 binning and PG0900 grating
-                break
-            else:
-                print "Invalid input: you must enter a column number between 0 and 3100."       
-        apextract.apall.line=int(colAnswer)
-    if faint=='6': # faint non-continuum source without local bkg subtraction
-        apextract.apall.nsum=-3
-        apextract.apall.background='none' # to subtract local background for extended galaxy emission behind object
-        apextract.apall.t_nsum=50
-        apextract.apall.t_step=15
-        apextract.apall.t_nlost=100
-        apextract.apall.t_niterate = 3 
-        apextract.apall.t_naverage = 1
-        apextract.apall.t_grow = 1.0
-        # ask user to input a column where the SN is bright enough to start tracing from
-        while True:
-            colAnswer = raw_input("Please enter a column number where the SN is easily visible and can be traced: ")
-            if int(colAnswer) > 0 or int(colAnswer) < 3100: # temporarily hard-coded upper limit for 2x4 binning and PG0900 grating
-                break
-            else:
-                print "Invalid input: you must enter a column number between 0 and 3100."       
-        apextract.apall.line=int(colAnswer)
+        print "Use command ':line #' in apall to specify a column where the spectrum is easily visible."
     first = twodimage[:3]
     if first == 'sci':
         apextract.apall.interactive='yes'
@@ -370,16 +264,7 @@ def run_apall(twodimage,spectrum,saltgain,faint,customRun=False):
         print 'running apall non-interactively on standard star image: '+twodimage
     # since there are 2 extensions (0 and 1), need to specify extraction extension: 1
     twodimage = twodimage+'[1]'
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':       
-            iraf.eparam(apextract.apall)
+
     # This runs apextract.apall
     apextract.apall(input=twodimage,output=spectrum,nfind=1,trace='yes',fittrace='yes',recenter='yes',resize='yes',edit='yes',extract='yes')
 
@@ -399,22 +284,13 @@ def run_apsum(twodimage,refimage,spectrum,customRun=False):
     apextract.apsum.usigma=2.0
     # need to specify extraction extension (1, not 0) since there are 2
     twodimage = twodimage+'[1]'
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':
-            iraf.eparam(apextract.apsum)
+
     # This runs apextract.apsum
     apextract.apsum(input=twodimage,output=spectrum,references=refimage)
 
 
 # This function sets the parameters for the pyraf task apextract.apsum and then runs it
-def run_apsumSci(inputimage,refimage,spectrum,faint,customRun=False):
+def run_apsumSci(inputimage,refimage,spectrum,customRun=False):
     # this resets the parameters of apextract.apsum
     apextract.apsum.unlearn()
     apextract.apsum.interactive='no' # non-interactive
@@ -425,28 +301,16 @@ def run_apsumSci(inputimage,refimage,spectrum,faint,customRun=False):
     apextract.apsum.clean='yes' # we want cosmic rays and bad pixels cleaned for science
     apextract.apsum.weights='variance' # we want a weighted extraction for science
     apextract.apsum.pfit='fit1d'
-    apextract.apsum.nsum=50
+    apextract.apsum.nsum=-1000 # should deal with bright and faint spectra equally well
     apextract.apsum.lsigma=2.0
     apextract.apsum.usigma=2.0
-    # this makes additional parameter changes if spectrum is faint
-    if faint == '1':
-        apextract.apsum.nsum=-1000 # taken from apall for faint spectra above
     # this sets the gain parameter as specified in inputimage's 0-header
     hduin = pyfits.open(inputimage[:len(inputimage)-3]) # pyfits open fits file, not fits[1] "file"
     hdr = hduin[0].header
     thisgain = hdr.get('GAIN',1.0) # default for our usual SALT long-slit spectroscopy settings
     hduin.close()
     apextract.apsum.gain=thisgain
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':       
-            iraf.eparam(apextract.apsum)
+
     # This runs apextract.apsum
     apextract.apsum(input=inputimage,output=spectrum,references=refimage)
     
@@ -470,16 +334,7 @@ def run_identify(arcsci,lamplines,customRun=False):
     onedspec.identify.autowrite='No'
     onedspec.identify.database='database'
     onedspec.identify.section='middle line'
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':           
-            iraf.eparam(onedspec.identify)
+
     # this runs longslit.identify
     onedspec.identify(images=arcsci,coordlist=lamplines)
     
@@ -503,16 +358,7 @@ def run_reidentify(input,ref,lamplines,customRun=False):
     onedspec.reidentify.match=-3.0
     onedspec.reidentify.maxfeatures=50
     onedspec.reidentify.verbose='yes'
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':       
-            iraf.eparam(onedspec.reidentify)
+
     # this runs longslit.reidentify non-interactively
     onedspec.reidentify(reference=ref,images=input,coordlist=lamplines)
 
@@ -522,16 +368,7 @@ def run_dispcor(original,corrected,customRun=False):
     # this resets the parameters of onedspec.dispcor
     onedspec.dispcor.unlearn()
     onedspec.dispcor.verbose='yes'
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':       
-            iraf.eparam(onedspec.dispcor)
+    
     # This runs onedspec.dispcor (REFSPEC1 keyword addition was done by identifyarcs and reidentifyarcs)
     onedspec.dispcor(input=original,output=corrected)
     
@@ -553,17 +390,7 @@ def run_standard(standardimage,outputname,exp,air,starName,customRun=False):
     onedspec.standard.bandsep = 20.0
     # the star_name is the same as the root name of the dat file in the salt standards caldir
     onedspec.standard.star_name = starName
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        onedspec.standard.interact='YES' # give option to run interactively
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':       
-            iraf.eparam(onedspec.standard)
+    
     # this runs onedspec.standard resulting in an std file named outputname 
     onedspec.standard(input=standardimage+'[1]',output=outputname)
     
@@ -580,17 +407,7 @@ def run_sensfunc(stddata,sensname,customRun=False):
     onedspec.sensfunc.interactive='NO' # non-interactive fitting 
     onedspec.sensfunc.graphs='sri'
     onedspec.sensfunc.answer='NO' # user shouldn't have to input anything else, just check fit and quit
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        onedspec.sensfunc.interactive='YES' # give option to run interactively
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':       
-            iraf.eparam(onedspec.sensfunc)
+
     # runs onedspec.sensfunc resulting in a file named sensname
     onedspec.sensfunc(standards=stddata,sensitivity=sensname)
     
@@ -614,16 +431,6 @@ def run_calibrate(scienceimage,fluximage,sensfilename,customRun=False):
     # runs onedspec.calibrate resulting in a flux-calibrated spectrum with name fluximage (on [SCI] extension)
     scienceimage1 = scienceimage+'[1]'
     
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':       
-            iraf.eparam(onedspec.calibrate)
     
     onedspec.calibrate(input=scienceimage1,output=fluximage)
     
@@ -646,31 +453,16 @@ def run_odcombine(inputlistseq,finalspectrumname,saltgain,customRun=False):
     onedspec.odcombine.gain = saltgain
     onedspec.odcombine.masktype = 'goodvalue'
     onedspec.odcombine.maskvalue = 0.0
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':
-            iraf.eparam(onedspec.odcombine)
+    
     # running onedspec.odcombine resulting in the final wave- and flux-calibrated spectrum named finalspectrumname
     onedspec.odcombine(input=inputlistseq,output=finalspectrumname)
     
 
 # This function creates a copy of a FITS file and preserves the 2-extension structure.
 def run_imcopy(inputname,outputname,numExt=2,customRun=False):  
+    # imcopy seems to cause a weird bug in tasks.scaleFluxScienceSpectra() (not exact copy is created), using shutil instead
     shutil.copyfile(inputname,outputname) # careful, this will overwrite outputname if it already exists
     print inputname+' ==> copied to ==> '+outputname
-    ''' imcopy seems to cause a weird bug in tasks.scaleFluxScienceSpectra() (not exact copy is created), using shutil instead
-    if numExt == 1:
-        imutil.imcopy(input=inputname+'[0]',output=outputname+'[append]')
-    else:
-        imutil.imcopy(input=inputname+'[0]',output=outputname+'[append]')
-        imutil.imcopy(input=inputname+'[1]',output=outputname+'[append]')
-    ''' 
         
 # This function deletes a file.
 def run_imdel(inputname,customRun=False):
@@ -689,16 +481,7 @@ def run_imarithGeneral(op1,op2,oper,outname,customRun=False):
     imutil.imarith.unlearn()
     imutil.imarith.divzero=0.0
     # appends [1] to end of dividend image since that's where data lives
-    # If running task individually, pop up epar window to let users change parameters if they want.
-    if customRun == True:
-        while True: 
-            eparAnswer = raw_input("Do you want to further edit the parameters? 0 for no, 1 for yes.")
-            if eparAnswer == '0' or eparAnswer == '1':
-                break
-            else:
-                print "Invalid input: you must enter either 0 (no) or 1 (yes)."     
-        if eparAnswer == '1':
-            iraf.eparam(imutil.imarith)
+    
     # This runs imutil.imarith
     imutil.imarith(operand1=op1,op=oper,operand2=op2,result=outname)    
     

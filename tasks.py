@@ -823,17 +823,9 @@ def subtractbackground(scienceimages=dicts.wavesciences,indiv=False):
             d.set('file '+wavescience)
             d.set('zoom to fit')
             d.set('zscale')
-        # this asks the user if the spectral line looks very faint (look in ds9)
-        # if the user says the line is very faint, then apall is run with a different set of parameters
-        while True:
-            answer = raw_input("Please enter 0 if the spectrum looks bright, or 1 if it looks faint: ")
-            if answer == '0' or answer == '1':
-                break
-            else:
-                print "Invalid input. You must enter either 0 or 1."
         # this calls the run_background function
-        print "Running background subtraction on: "+wavescience
-        pyrafCalls.run_background(twodimage=wavescience,newimage=auxname,faint=answer,customRun=indiv)
+        print "Running automated 2D background subtraction on: "+wavescience
+        pyrafCalls.run_background(twodimage=wavescience,newimage=auxname,customRun=indiv)
         # this copies the old images to preserve file structure, and transfers the extracted data+header
         pyrafCalls.run_imcopy(inputname=wavescience,outputname=name)
         hdulist = pyfits.open(auxname)
@@ -847,7 +839,6 @@ def subtractbackground(scienceimages=dicts.wavesciences,indiv=False):
         hdunew[1].data = datnew
         hdunew[1].header = hdrnew
         hdr = hdunew[0].header
-        hdr['RUFAINT'] = answer # necessary for automatic apsum extraction of non-bkg-subtracted sci images in extractSciSigma()
         hdunew.flush()
         hdunew.close()
         pipeHistory.updatePipeKeys(inputname=name,imagetype='science',procChar='b')
@@ -915,25 +906,24 @@ def extractsciences(scienceimages=dicts.backgroundsciences,wavescispectra=dicts.
         print "3: Spectrum looks FAINT. (No local background subtraction.)"
         print "4: Spectrum looks FAINT with continuum emission (need local background subtraction)."
         print "5: Spectrum has NO continuum emission (need local background subtraction)."
-        print "6: Spectrum has NO continuum emission (NO local background subtraction)."
-        print "7: Spectrum has NO continuum emission (NO global bkg; YES local bkg)."
-        print "8: Continuum; global bkg, but use non-global-bkg-subtracted for apall."
+        print "6: Spectrum has NO continuum emission (use non-global-bkg-subtracted spectrum)."
+        print "7: Spectrum has continuum emission; use non-global-bkg-subtracted spectrum."
         print "For 4 & 5, a pre-sky-subtracted level will be re-added to the background-subtracted image."
         while True:
-            answer = raw_input("Please enter 1, 2, 3, 4, 5, 6, 7 or 8 based on the above options: ")
-            if answer == '1' or answer == '2' or answer == '3' or answer == '4' or answer == '5' or answer == '6' or answer == '7' or answer  == '8':
+            answer = raw_input("Please enter 1, 2, 3, 4, 5, 6, or 7 based on the above options: ")
+            if int(answer) in np.arange(1,8):
                 break
             else:
-                print "Invalid input. You must enter either 1, 2, 3, 4, 5, 6, 7 or 8."
+                print "Invalid input. You must enter either 1, 2, 3, 4, 5, 6, or 7."
         # add 'RUAPALL' keyword for extractarcs() reference image
         pyfits.setval(bkgscience,'RUAPALL',ext=0,value=bkgscience)
         # declares output filenames and calls run_apall function
         name = 'sci'+str(angle)+'ext'+suffix+'.fits'
         auxname = 'sci'+str(angle)+'ext'+suffix+'AUX'+'.fits'
-        if answer == '4' or answer == '5' or answer == '6' or answer == '7' or answer == '8':
+        if answer == '4' or answer == '5' or answer == '6' or answer == '7':
             # Ask user for an estimate of the median local background around the spectrum in the non-background-subtracted image.
             wavescience = wavescispectra[angle] # non-background-subtracted science image
-            if answer == '7' or answer == '8':
+            if answer == '6' or answer == '7':
                 # add 'RUAPALL' keyword with answer for extractarcs() reference image
                 pyfits.setval(bkgscience,'RUAPALL',ext=0,value=wavescience)
                 bkgscience = wavescience
@@ -950,16 +940,22 @@ def extractsciences(scienceimages=dicts.backgroundsciences,wavescispectra=dicts.
                 d.set('zoom to fit')
                 d.set('zscale')
             print "You chose option "+answer+". The non-background-subtracted image has been opened in ds9."
-            if answer == '7' or answer == '8':
+            if answer == '6' or answer == '7':
                 print "Skipping imarith for adding counts back in."
             else:
-                while True:
-                    pssl = raw_input("Please enter an estimate of the median local background level around the spectrum: ")
-                    if pssl != '': # need actual error condition using pssl
-                        break
-                    else:
-                        print "Invalid input. Use ds9 to estimate the median local background level around the spectrum."
-                # add pssl to background-subtracted image (overwrite it)
+                # IMPORTANT: the following works only for CCDSUM = '2 4'
+                if pyfits.getval(bkgscience,'CCDSUM') != '2 4': 
+                    print "WARNING (extractsciences): CCDSUM != '2 4', can't get pssl"
+                    return
+                # Find avg min value across each chip (not in chip gaps or super-oversubtracted regions); add back to bkgscience to offset negative sky/object values
+                hdu = pyfits.open(bkgscience)
+                mosaic = hdu[1].data.copy()
+                hdu.close()
+                chip1 = mosaic[460:600,50:1040] # these pixel numbers must be changed if CCDSUM is not '2 4'
+                chip2 = mosaic[460:600,1130:2100]
+                chip3 = mosaic[460:600,2200:3140]
+                pssl = np.abs((np.min(chip1)+np.min(chip2)+np.min(chip3))/3.0)
+                print bkgscience+": Adding "+str(pssl)+" back into image."
                 pyrafCalls.run_imarithGeneral(op1=bkgscience+'[1]',op2=pssl,oper='+',outname='tempapall.fits',customRun=False)
                 hdu = pyfits.open('tempapall.fits')
                 datnew = hdu[0].data.copy()
@@ -1186,7 +1182,6 @@ def extractSciSigma(scienceimages=dicts.wavesciences,refsciences=dicts.backgroun
             print "There does not exist a 2D-background-subtracted science extraction for angle: "+angle
             print "Skipping extraction and insertion of original sky and sigma spectra for image: "+wavesci
             continue
-        # this checks the bkgsci 0-header for 'RUFAINT' keyword (1 => yes, faint spectrum; default = 0)
         bkgsci = refsciences.get(angle,'') # there should exist a background science for each wavescience
         # but if no bkgsci exists, skip this apsum extraction and just leave extsci's sky and sigma spectrum as they are
         if bkgsci == '':
@@ -1194,10 +1189,6 @@ def extractSciSigma(scienceimages=dicts.wavesciences,refsciences=dicts.backgroun
             print "Cannot acquire, with apsum, a sky spectrum and sigma spectrum for: "+wavesci
             print "Retaining the current extracted science spectrum's sky and sigma spectra."
             continue
-        hdubkg =  pyfits.open(bkgsci) # else, find the 'RUFAINT' keyword
-        hdrbkg = hdubkg[0].header
-        faintSpectrum = hdrbkg.get('RUFAINT','0') # default value is '0', i.e., not faint
-        hdubkg.close()
         # this gets the relevant information about the wavesci image, and updates the 0-header and 1-header
         suffixlist = wavesci.split('.')
         suffix = suffixlist[1][5:]
@@ -1212,7 +1203,6 @@ def extractSciSigma(scienceimages=dicts.wavesciences,refsciences=dicts.backgroun
         hdr.update('AIRMASS',airmass)
         hdr.update('EXPTIME',exptime)
         hdr.update('OBJECT',object)
-        hdr0.update('RUFAINT',faintSpectrum)
         hdulist.flush()
         hdr0_old = hdulist[0].header.copy()
         hdr1_old = hdulist[1].header.copy()
@@ -1222,7 +1212,7 @@ def extractSciSigma(scienceimages=dicts.wavesciences,refsciences=dicts.backgroun
         auxnamesci = 'sci'+str(angle)+'aps'+suffix+'AUX.fits' # output name for auxiliary science (with data)
         # this calls the run_apsumSci function found further below
         refsci = pyfits.getval(bkgsci,'RUAPALL') # generally bkgscience will have name of refsci, see extractsciences()
-        pyrafCalls.run_apsumSci(inputimage=wavesci+'[1]',refimage=refsci+'[1]',spectrum=auxnamesci,faint=faintSpectrum,customRun=indiv)
+        pyrafCalls.run_apsumSci(inputimage=wavesci+'[1]',refimage=refsci+'[1]',spectrum=auxnamesci,customRun=indiv)
         # this copies the old images to preserve file structure, and transfers the extracted data+header
         pyrafCalls.run_imcopy(inputname=wavesci,outputname=namesci)
         hdulist = pyfits.open(auxnamesci)
@@ -1832,7 +1822,6 @@ def sigmaClipSpectra(dispspectra=dicts.dispsciences,fluxspectra=dicts.fluxscienc
         print "One of the inputted dictionaries does not exist: cannot proceed."
         return
     angles = dispspectra.keys() # clean dispersion-corrected science spectra
-    answer = -1
     for angle in angles:
         dspscience = dispspectra[angle]
         bwmscience = masksciences[angle]
@@ -1840,20 +1829,7 @@ def sigmaClipSpectra(dispspectra=dicts.dispsciences,fluxspectra=dicts.fluxscienc
         dat = hdu[1].data.copy()
         dat = dat[0][0]
         hdr = hdu[0].header
-        faintKey = hdr.get('RUFAINT','1') # 3,4 => faint extraction, 1,2 => bright extraction
         hdu.close()
-        if faintKey == '3' or faintKey == '4':
-            print 'WARNING: This was a FAINT reduction, possibly a host galaxy spectrum.'
-            print 'Sigma-clipping the spectrum might remove strong, narrow emission lines.'
-            print 'This algorithm should be okay for actual supernovae.'
-            while True:
-                answer = raw_input("Please enter 0 to skip sigma-clipping, or 1 to continue: ")
-                if answer == '0' or answer == '1':
-                    break
-                else:
-                    print "Invalid input. You must enter either 0 or 1."
-        if answer == '0':
-            break
         datM = np.ma.array(dat,copy=True)
         for i in range(2):
             dev = datM - np.median(datM)
@@ -1870,25 +1846,6 @@ def sigmaClipSpectra(dispspectra=dicts.dispsciences,fluxspectra=dicts.fluxscienc
     angles = fluxspectra.keys() # clean flux-calibrated science spectra
     for angle in angles:
         flxscience = fluxspectra[angle]
-        if answer == '0':
-            break
-        elif answer == -1:
-            hdu = pyfits.open(flxscience)
-            hdr = hdu[0].header
-            faintKey = hdr.get('RUFAINT','1') # 3,4 => faint extraction, 1,2 => bright extraction
-            hdu.close()
-            if faintKey == '3' or faintKey == '4':
-                print 'WARNING: This was a FAINT reduction, possibly a host galaxy spectrum.'
-                print 'Sigma-clipping the spectrum might remove strong, narrow emission lines.'
-                print 'This algorithm should be okay for actual supernovae.'
-                while True:
-                    answer = raw_input("Please enter 0 to skip sigma-clipping, or 1 to continue: ")
-                    if answer == '0' or answer == '1':
-                        break
-                    else:
-                        print "Invalid input. You must enter either 0 or 1."
-        if answer == '0':
-            break
         bwmscience = masksciences[angle]
         hdu = pyfits.open(flxscience)
         dat = hdu[1].data.copy()
