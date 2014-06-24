@@ -406,12 +406,10 @@ def run_identify2d(fs=None):
         ga = arcgas[i]
         # find lamp and corresponding linelist
         lamp = pyfits.getval(f,'LAMPID')
-        # linelistpath is a global variable defined in beginning, path to where the line lists are.
-        try: lamplines = lineListPath+lampfiles[lamp]
-        except KeyWARNING:
-            print('Could not find the proper linelist for '+lamp+' lamp.')
-            raise
         
+        # linelistpath is a global variable defined in beginning, path to where the line lists are.
+        lamplines = lineListPath+lampfiles[lamp]
+
         #img num should be right before the .fits
         imgnum = f[-8:-5]
         # run pysalt specidentify
@@ -421,28 +419,32 @@ def run_identify2d(fs=None):
                           startext=1,clobber='yes',verbose='yes',mode = 'hl',logfile = 'salt.log')
         os.chdir('..')
 
-def run_rectify(fs=None):
-    if fs is None: fs = glob('id2/arc*id2*.db') 
-    if len(fs)==0:
+def run_rectify(ids = None, fs = None):
+    os.chdir('work')
+    if ids is None: ids = glob('id2/arc*id2*.db') 
+    if fs is None: fs = glob('mos/*mos*.fits')
+    if len(ids)==0:
         print "WARNING: No wavelength solutions for rectification."
+        os.chdir('..')
         return
-    # rectify each sci/arc and pop it open briefly in ds9
-    scifs,scigas = get_ims(glob('mos/*mos*.fits'),'sci')
-    arcfs,arcgas =get_ims(glob('mos/*mos*.fits'),'arc')
+    if len(fs)==0:
+        print "WARNING: No images for rectification."
+        os.chdir('..')
+        return
     
-    ims = np.append(scifs,arcfs)
-    gas = np.append(scigas, arcgas)
-    
-    if not os.path.exists('rec'):os.mkdir('rec')
+    ims, gas = get_scis_and_arcs(fs)
+    if not os.path.exists('rec'): os.mkdir('rec')
     for i,f in enumerate(ims): 
-            if f in scifs: typestr = 'sci'
-            else: typestr = 'arc'
-            ga,imgnum = gas[i],f[-8:-5]
-            outfile = 'rec/'+typestr+'%0.2frec'%(ga)+imgnum+'.fits'
-            iraf.unlearn(iraf.specrectify); iraf.flpr()
-            iraf.specrectify(images=f,outimages=outfile,solfile='arc%0.2fsol'%(ga)+'.fits',outpref='',caltype='line',
+        fname =  f.split('/')[1]
+        typestr = fname[:3]
+        ga,imgnum = gas[i],fname[-8:-5]
+        
+        outfile = 'rec/'+typestr+'%0.2frec'%(ga)+imgnum+'.fits'
+        iraf.unlearn(iraf.specrectify); iraf.flpr()
+        iraf.specrectify(images=f,outimages=outfile,solfile=ids[i],outpref='',
                              function='legendre',order=3,inttype='interp',clobber='yes',verbose='yes')            
-
+    os.chdir('..')
+    
 def run_unmosaic(fs=None):
     if fs is None: fs = glob('rec/*rec*.fits') 
     if len(fs)==0:
