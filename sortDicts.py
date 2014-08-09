@@ -72,12 +72,12 @@ def sort():
         try: # checks if 'GAIN' keyword exists (SALTMOSAIC may not have transferred it)
             if header.get('GAIN','') == '':
                 if header.get('GAINSET','') == 'FAINT' and header.get('ROSPEED','') == 'SLOW':
-                    header.update('GAIN',2.443) # value from pysalt wiki documentation for this keyword-combo
-                    print img+": Changed 'GAIN' to 2.443"
+                    header.update('GAIN',1.00) # value from pysalt wiki documentation for this keyword-combo
+                    print img+": Changed 'GAIN' to 1.00"
         except:
             if header.get('GAINSET','') == 'FAINT' and header.get('ROSPEED','') == 'SLOW':
-                    header.update('GAIN',2.443) # value from pysalt wiki documentation for this keyword-combo
-                    print img+": Changed 'GAIN' to 2.443"
+                    header.update('GAIN',1.00) # value from pysalt wiki documentation for this keyword-combo
+                    print img+": Changed 'GAIN' to 1.00"
         header.update('AIRMASS',1.28) # standard AIRMASS for SALT (to prevent negative or high airmass for some images)
         print img+": Changed 'AIRMASS' to 1.28"
         hdulist.flush()
@@ -213,7 +213,8 @@ def sort():
             elif 'r' in processed and imgclass == 'standard': # rectified standard
                 dicts.wavestandards[angle] = img
             elif 'a' in processed and imgclass == 'arc': # flatarc that had specidentify run on it
-                dicts.wavesols[angle] = img
+                wave_sol = pyfits.getval(img,'RUSPECID',ext=0)
+                if wave_sol != '': dicts.wavesols[angle] = wave_sol
                 # since 'a' will always be with 'f', add img to flatarcs[angle] as well
                 dicts.flatarcs[angle] = img
             elif 'l' in processed and imgclass == 'science': # lacosmicx-corrected sciences

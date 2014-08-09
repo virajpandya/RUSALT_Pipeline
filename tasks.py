@@ -29,6 +29,7 @@ from scipy.optimize import leastsq # For fitting functions to 1-D spectra.
 import lacosmicx # For removal of cosmic rays from 2-D science images.
 import ds9 # To open 2-D images for the user's convenience.
 import pyfits # To access and modify FITS data files.
+import datetime # For finding average UTC-OBS and DATE-OBS
 
 # PyRAF is the main program used to reduce, extract, and calibrate data.
 from pyraf import iraf
@@ -594,7 +595,6 @@ def specidentifyarcs(arcimages=dicts.flatarcs,indiv=False):
             hdr['RUSPECID'] = idfilesci
             hdulist.flush()
             hdulist.close()
-            pipeHistory.updatePipeKeys(inputname=flatarc,imagetype='arc',procChar='a')
             # this adds the newly created wavelength solution file to the wavesols dictionary
             dicts.wavesols[angle] = idfilesci
             # run specrectify on flatarc
@@ -602,8 +602,6 @@ def specidentifyarcs(arcimages=dicts.flatarcs,indiv=False):
             namearc = 'arc'+str(angle)+'wav'+suffix+'.fits'
             # this calls the run_specrectify function found further below
             pyrafCalls.run_specrectify(input=flatarc,output=namearc,idfile=idfilesci,customRun=indiv)       
-            # this adds the 'RUPIPE' and 'RUIMGTYP' keywords to namearc's 0-header
-            pipeHistory.updatePipeKeys(inputname=namearc,imagetype='arc',procChar='r')
             # this opens the rectified arc in ds9, asks user to re-run or proceed to next arc
             print namearc+' has been opened in ds9 so you can verify that rectification was successful.'
             d = ds9.ds9(start=True)
@@ -625,9 +623,12 @@ def specidentifyarcs(arcimages=dicts.flatarcs,indiv=False):
             if answer == '0': # delete wavelength solution and rectified arc before specidentify is redone 
                 os.remove(idfilesci)
                 os.remove(namearc)
+                dicts.wavesols[angle] = ''; pyfits.delval(flatarc,'RUSPECID',ext=0)
                 print "Wavelength solution and rectified arc deleted; re-running specidentify."
             elif answer == '1': # add rectified arc to relevant global dictionary, continue onto next angle (break out of while loop)
                 dicts.wavearcs[angle] = namearc
+                pipeHistory.updatePipeKeys(inputname=flatarc,imagetype='arc',procChar='a')
+                pipeHistory.updatePipeKeys(inputname=namearc,imagetype='arc',procChar='r')
                 print 'output: '+namearc
                 break
     print 'The specidentify wavelength solution filenames are:'
@@ -3370,3 +3371,84 @@ def telluricCorrect(combspectra=dicts.combinedspectra,indiv=False):
     print "The name of the telluric-corrected science spectrum is:"
     print nametel
 
+'''
+This function transfers important header keywords from the individual spectra (dsp or flx)
+to the combined spectra (it is called within combinespectra()). For example,
+it'll add EXPTIME1, EXPTIME2, EXPTIME3, EXPTIME4 keywords to the combined spectrum.
+It will also properly average/sum the keywords and add that to the combined spectrum
+(e.g., EXPTIME = EXPTIME1 + EXPTIME2 + EXPTIME3 + EXPTIME4). Special attention is paid to UTC times/dates.
+Inputs = combined spectrum filename, array of individual spectra filenames
+'''
+def combine_header_keys(combined_spectrum,individual_spectra):
+    # define header keys which should be the same for all individual spectra (only need to transfer these ones)
+    common_keys = (['PROPID','PROPOSER','OBSERVER','OBSERVAT','SITELAT','SITELONG',
+                   'INSTRUME','OBJECT','RA','DEC','PA','PIXSCALE','NAMPS','NCCDS',
+                   'CCDSUM','GAINSET','ROSPEED','GRATING','OBSMODE','MASKTYP',
+                   'EQUINOX','EPOCH','TIMESYS'])
+    # define header keys which will be different for individual spectra (need to transfer these separately + their combinations)
+    # elements are tuples: (actual_key,shorter_key) [latter ensures enough space for spectrum # suffix]
+    avg_keys = ([('JD','JD'),('EXPTIME','EXPTIME'),('AIRMASS','AIRMASS'),('CCDTEM','CCDTEM'),
+                  ('DEWTEM','DEWTEM'),('AMPTEM','AMPTEM'),('CENTEM','CENTEM'),('TELTEM','TELTEM'),
+                  ('PAYLTEM','PAYLTEM'),('COLTEM','COLTEM'),('CAMTEM','CAMTEM'),('GAIN','GAIN'),
+                  ('TIME-OBS','TIM-OBS'),('UTC-OBS','UTC-OBS'),('DATE-OBS','DAT-OBS'),
+                  ('BPM','BPM'),('GR-ANGLE','GR-ANG')])
+    non_avg_keys = ['TIME-OBS','UTC-OBS','DATE-OBS','BPM','GR-ANGLE'] # don't try to average these keys
+    ### first: add common_keys from 1st file in individual_spectra to combined_spectrum header
+    for k in common_keys:
+        val = pyfits.getval(individual_spectra[0],k,ext=0)
+        pyfits.setval(combined_spectrum,k,value=val)
+    ### second: add header keys from individual spectra, as well as one key for the average values
+    for k_old,k_new in avg_keys:
+        combined_val = 0.0 # k_old will have this value; k_new+str(i) will have the individual values
+        for i,s in enumerate(individual_spectra):
+            # transfer individual spectrum's key by suffixing i to k_new
+            val = pyfits.getval(s,k_old,ext=0)
+            pyfits.setval(combined_spectrum,k_new+str(i),value=val)
+            # if non_avg_key: add weighted (unweighted for EXPTIME) key value to combined_val
+            if k_old not in non_avg_keys:
+                if k_old == 'EXPTIME': combined_val += val
+                else: combined_val += val/float(len(individual_spectra))
+        # if not non_avg_key: add combined_val back into combined_spectrum as k_old header key 
+        if k_old not in non_avg_keys: pyfits.setval(combined_spectrum,k_old,value=combined_val)
+    # third: pull start times and start dates, and exptimes, for each spectrum
+    times,dates,exptimes = [],[],{} # exptimes is a dict because i need to access its values later after sorting times/dates
+    for i,s in enumerate(individual_spectra):
+        times.append(pyfits.getval(s,'UTC-OBS',ext=0)[:-4]) # removed fractional second suffix ('.***')
+        dates.append(pyfits.getval(s,'DATE-OBS',ext=0))
+        exptimes[pyfits.getval(s,'UTC-OBS',ext=0)[:-4]] = pyfits.getval(s,'EXPTIME',ext=0)
+        pyfits.setval(combined_spectrum,'SPECT'+str(i),value=s)
+    ### fourth: add 0.5*exptime to each spectrum's start time to find that spectrum's "midpoint UTC"
+    for i,t_str in enumerate(times): 
+        t_obj = datetime.datetime.strptime(t_str,'%H:%M:%S') # datetime object
+        mid_t_obj = t_obj + datetime.timedelta(seconds=0.5*exptimes[t_str])
+        mid_t_str = datetime.datetime.strftime(mid_t_obj,'%H:%M:%S')
+        # the order of elements in times and individual_spectra should be the same so okay to suffix same i to 'UTC-MID'
+        pyfits.setval(combined_spectrum,'UTC-MID'+str(i),value=mid_t_str)
+    ### fifth: create datetime objects from the times AND dates arrays to compute overall midpoint UTC-MID, DATE-MID, & DAT-FRAC
+    datetimes = []
+    for i,t_str in enumerate(times):
+        t_obj = datetime.datetime.strptime(t_str,'%H:%M:%S') # datetime object for time
+        d_obj = datetime.datetime.strptime(dates[i],'%Y-%m-%d') # datetime object for corresponding date
+        dt_obj = (datetime.datetime.combine(datetime.date(d_obj.year,d_obj.month,d_obj.day),
+                  datetime.time(t_obj.hour,t_obj.minute,t_obj.second)))
+        datetimes.append(dt_obj)
+    datetimes = np.sort(datetimes) # sort from earliest to latest datetime object
+    # add full exptime of latest observation to its time to get endtime (since 'UTC-OBS' is beginning time of obs)
+    dt_last_str = datetime.datetime.strftime(datetimes[-1],'%H:%M:%S') # to access exptimes dict
+    datetimes[-1] = datetimes[-1] + datetime.timedelta(seconds=exptimes[dt_last_str])
+    dt_delta = datetimes[-1] - datetimes[0] # number of days and seconds between end of final obs and beginning of first obs
+    total_seconds = dt_delta.days*24.0*60.0*60.0 + dt_delta.seconds # total # of seconds for entire observation run
+    # add half of total_seconds to earliest datetime object to get a proxy for the midpoint UTC time and date
+    dt_mid = datetimes[0] + datetime.timedelta(seconds=0.5*total_seconds)
+    mid_date_str = datetime.datetime.strftime(dt_mid,'%Y-%m-%d')
+    mid_time_str = datetime.datetime.strftime(dt_mid,'%H:%M:%S')
+    # add this overall midpoint date and time as separate keys to header
+    pyfits.setval(combined_spectrum,'UTC-MID',value=mid_time_str)
+    pyfits.setval(combined_spectrum,'DATE-MID',value=mid_date_str)
+    # compute fractional day as a suffix for 'DATE-MID' and which can be used for final spectrum file name
+    frac_day = (dt_mid.hour*60*60.+dt_mid.minute*60.+dt_mid.second)/86400.0 # total sec from H:M:S out of 86,400 seconds per day
+    frac_mid_date_str = mid_date_str+str(frac_day)[1:5] # suffixes dec pt and 3 decimal places
+    pyfits.setval(combined_spectrum,'DAT-FRAC',value=frac_mid_date_str)
+    # copy combined_spectrum with following naming convention (example): OBJECTNAME_2014-08-08.298_Rutgers_flx.fits
+    new_filename = pyfits.getval(combined_spectrum,'OBJECT')+'_'+pyfits.getval(combined_spectrum,'DAT-FRAC')+'_Rutgers_'+combined_spectrum[-8:-5]+'.fits'
+    shutil.copyfile(combined_spectrum,new_filename)

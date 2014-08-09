@@ -576,7 +576,7 @@ def run():
                     print "You chose to return to the submenu instead of replacing the old extracted arc spectra."
                     continue
                 os.remove(angleextarc_sci) # deleting both sci- and std-extracted arc spectra since they're both done by extractarcs() anyway
-                os.remove(angleextarc_std)
+                if angleextarc_std != '': os.remove(angleextarc_std)
             anglewavearc = dicts.wavearcs[gratingangle]
             inputwavearcs = {gratingangle:anglewavearc}
             inputrefsciences = {gratingangle:anglebkgscience}

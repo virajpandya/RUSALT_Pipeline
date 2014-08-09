@@ -41,8 +41,9 @@ chipGapPix24 = ((1035,1121),(2115,2191))
 chipGapPix44 = ((500,551),(1035,1091))
 
 # 'SLOW' and 'FAINT' RSS multiplicative gain = simple average of values for each of the 6 amps
-gain = 2.44
-gain_dict = {'faint_slow':2.44}
+# 2014-07-18: should be 1.00 because the PySALT task saltgain already does the multiplication.
+gain = 1.00
+gain_dict = {'faint_slow':1.00}
 
 
 
